@@ -1,0 +1,559 @@
+diff --git a/codex-rs/config/src/types.rs b/codex-rs/config/src/types.rs
+index 96a0222..956e787 100644
+--- a/codex-rs/config/src/types.rs
++++ b/codex-rs/config/src/types.rs
+@@ -823,6 +823,12 @@ pub struct Tui {
+     #[serde(default = "default_true")]
+     pub status_line_use_colors: bool,
+ 
++    /// Shell command whose stdout is rendered below the composer, like Claude Code's
++    /// `statusLine` command. It receives status JSON on stdin and may print multiple
++    /// ANSI-colored lines. Re-run about once per second while the TUI is open.
++    #[serde(default)]
++    pub status_line_command: Option<String>,
++
+     /// Ordered list of terminal title item identifiers.
+     ///
+     /// When set, the TUI renders the selected items into the terminal window/tab title.
+diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
+index 0bf3dcf..3bca867 100644
+--- a/codex-rs/core/src/config/config_tests.rs
++++ b/codex-rs/core/src/config/config_tests.rs
+@@ -1266,6 +1266,7 @@ fn config_toml_deserializes_model_availability_nux() {
+             alternate_screen: AltScreenMode::default(),
+             status_line: None,
+             status_line_use_colors: true,
++            status_line_command: None,
+             terminal_title: None,
+             theme: None,
+             pet: None,
+@@ -4395,6 +4396,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
+             alternate_screen: AltScreenMode::Auto,
+             status_line: None,
+             status_line_use_colors: true,
++            status_line_command: None,
+             terminal_title: None,
+             theme: None,
+             pet: None,
+diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
+index e71ad88..12aa3f2 100644
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -793,6 +793,9 @@ pub struct Config {
+     /// Whether to color status line items with colors from the active syntax theme.
+     pub tui_status_line_use_colors: bool,
+ 
++    /// Command whose output is rendered as a multi-line HUD below the composer.
++    pub tui_status_line_command: Option<String>,
++
+     /// Ordered list of terminal title item identifiers for the TUI.
+     ///
+     /// When unset, the TUI defaults to: `activity` and `project`.
+@@ -4428,6 +4431,10 @@ impl Config {
+                 .as_ref()
+                 .map(|t| t.status_line_use_colors)
+                 .unwrap_or(true),
++            tui_status_line_command: cfg
++                .tui
++                .as_ref()
++                .and_then(|t| t.status_line_command.clone()),
+             tui_terminal_title: cfg.tui.as_ref().and_then(|t| t.terminal_title.clone()),
+             tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
+             tui_pet: cfg.tui.as_ref().and_then(|t| t.pet.clone()),
+diff --git a/codex-rs/thread-manager-sample/src/main.rs b/codex-rs/thread-manager-sample/src/main.rs
+index 1bcf5d1..08a6279 100644
+--- a/codex-rs/thread-manager-sample/src/main.rs
++++ b/codex-rs/thread-manager-sample/src/main.rs
+@@ -237,6 +237,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
+         tui_alternate_screen: AltScreenMode::Auto,
+         tui_status_line: None,
+         tui_status_line_use_colors: true,
++        tui_status_line_command: None,
+         tui_terminal_title: None,
+         tui_theme: None,
+         tui_raw_output_mode: false,
+diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
+index 8e9680a..be95209 100644
+--- a/codex-rs/tui/src/bottom_pane/mod.rs
++++ b/codex-rs/tui/src/bottom_pane/mod.rs
+@@ -313,6 +313,8 @@ pub(crate) struct BottomPane {
+     context_window_percent: Option<i64>,
+     context_window_used_tokens: Option<i64>,
+     keymap: RuntimeKeymap,
++    /// Command-backed HUD rendered below the composer (`tui.status_line_command`).
++    status_line_command: Option<crate::status_line_command::StatusLineCommand>,
+ }
+ 
+ pub(crate) struct BottomPaneParams {
+@@ -377,6 +379,7 @@ impl BottomPane {
+             status: None,
+             hook_status_message: None,
+             inline_banner: None,
++            status_line_command: None,
+             status_timer: crate::status_indicator_widget::StatusTimer::default(),
+             unified_exec_footer: UnifiedExecFooter::new(),
+             pending_input_preview: PendingInputPreview::new(),
+@@ -2229,6 +2232,13 @@ impl BottomPane {
+                 }))
+             };
+             flex2.push(/*flex*/ 0, composer);
++            if let Some(hud) = self
++                .status_line_command
++                .as_ref()
++                .and_then(crate::status_line_command::StatusLineCommand::hud)
++            {
++                flex2.push(/*flex*/ 0, RenderableItem::Owned(Box::new(hud)));
++            }
+             RenderableItem::Owned(Box::new(flex2))
+         }
+     }
+@@ -2261,6 +2271,14 @@ impl BottomPane {
+         }
+     }
+ 
++    pub(crate) fn set_status_line_command(
++        &mut self,
++        command: crate::status_line_command::StatusLineCommand,
++    ) {
++        self.status_line_command = Some(command);
++        self.request_redraw();
++    }
++
+     pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) {
+         if self.composer.set_status_line_enabled(enabled) {
+             self.request_redraw();
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index 57591c4..2bebceb 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -399,6 +399,7 @@ pub(crate) use backend_banners::AutomaticModelSwitchReason;
+ mod protocol;
+ mod protocol_requests;
+ mod rate_limits;
++mod status_command_input;
+ mod usage_notice;
+ use self::rate_limits::RateLimitErrorKind;
+ use self::rate_limits::RateLimitSwitchPromptState;
+@@ -762,6 +763,8 @@ pub(crate) struct ChatWidget {
+     feedback: codex_feedback::CodexFeedback,
+     // Current session rollout path (if known)
+     current_rollout_path: Option<PathBuf>,
++    /// Runner for `tui.status_line_command`, when configured.
++    status_line_command: Option<crate::status_line_command::StatusLineCommand>,
+     // Current working directory (if known)
+     current_cwd: Option<PathBuf>,
+     // App-server-backed command runner for status-line workspace metadata lookups.
+diff --git a/codex-rs/tui/src/chatwidget/constructor.rs b/codex-rs/tui/src/chatwidget/constructor.rs
+index 00d6329..5c66c7c 100644
+--- a/codex-rs/tui/src/chatwidget/constructor.rs
++++ b/codex-rs/tui/src/chatwidget/constructor.rs
+@@ -248,6 +248,7 @@ impl ChatWidget {
+             last_rendered_width: std::cell::Cell::new(None),
+             feedback,
+             current_rollout_path: None,
++            status_line_command: None,
+             current_cwd,
+             workspace_command_runner,
+             instruction_source_paths: Vec::new(),
+@@ -316,6 +317,14 @@ impl ChatWidget {
+         widget
+             .bottom_pane
+             .set_token_activity_command_enabled(widget.has_codex_backend_auth);
++        if let Some(command) = widget.config.tui_status_line_command.clone() {
++            let runner = crate::status_line_command::StatusLineCommand::spawn(
++                command,
++                widget.frame_requester.clone(),
++            );
++            widget.bottom_pane.set_status_line_command(runner.clone());
++            widget.status_line_command = Some(runner);
++        }
+         widget.refresh_status_surfaces();
+ 
+         widget
+diff --git a/codex-rs/tui/src/chatwidget/rate_limits.rs b/codex-rs/tui/src/chatwidget/rate_limits.rs
+index 3a0a7cc..e1240ac 100644
+--- a/codex-rs/tui/src/chatwidget/rate_limits.rs
++++ b/codex-rs/tui/src/chatwidget/rate_limits.rs
+@@ -283,6 +283,9 @@ impl ChatWidget {
+                     });
+             }
+             self.plan_type = snapshot.plan_type.or(self.plan_type);
++            if is_codex_limit {
++                self.publish_status_line_command_rate_limits(&snapshot);
++            }
+ 
+             if is_codex_limit
+                 && (matches!(source, RateLimitSnapshotSource::AccountUsage)
+diff --git a/codex-rs/tui/src/chatwidget/status_command_input.rs b/codex-rs/tui/src/chatwidget/status_command_input.rs
+new file mode 100644
+index 0000000..5fb3d81
+--- /dev/null
++++ b/codex-rs/tui/src/chatwidget/status_command_input.rs
+@@ -0,0 +1,104 @@
++//! Builds the JSON snapshot that `tui.status_line_command` receives on stdin.
++//!
++//! Field names follow Claude Code's statusLine payload where an equivalent exists
++//! (`model`, `effort`, `context_window`, `rate_limits`) so existing HUD scripts port easily;
++//! Codex-only extras live under `codex`.
++
++use super::*;
++use serde_json::json;
++
++const SHORT_WINDOW_MAX_MINUTES: i64 = 24 * 60;
++
++impl ChatWidget {
++    pub(super) fn publish_status_line_command_input(&self) {
++        let Some(command) = self.status_line_command.as_ref() else {
++            return;
++        };
++        let cwd = self
++            .current_cwd
++            .as_deref()
++            .unwrap_or(self.config.cwd.as_path())
++            .display()
++            .to_string();
++        let context_window_size = self.status_line_context_window_size();
++        let last_usage = self.token_info.as_ref().map(|info| &info.last_token_usage);
++        let total_usage = self.token_info.as_ref().map(|info| &info.total_token_usage);
++        let used_percentage = match (last_usage, context_window_size) {
++            (Some(usage), Some(size)) if size > 0 => {
++                Some((usage.total_tokens as f64 / size as f64 * 100.0).clamp(0.0, 100.0))
++            }
++            _ => None,
++        };
++        command.set_input(json!({
++            "hook_event_name": "Status",
++            "session_id": self.thread_id.map(|id| id.to_string()),
++            "transcript_path": self
++                .current_rollout_path
++                .as_ref()
++                .map(|path| path.display().to_string()),
++            "cwd": cwd,
++            "workspace": { "current_dir": cwd },
++            "version": CODEX_CLI_VERSION,
++            "model": {
++                "id": self.current_model(),
++                "display_name": self.model_display_name(),
++            },
++            "effort": {
++                "level": Self::status_line_reasoning_effort_label(
++                    self.effective_reasoning_effort().as_ref(),
++                ),
++            },
++            "context_window": {
++                "context_window_size": context_window_size,
++                "used_percentage": used_percentage,
++                "codex_used_percentage": self.status_line_context_used_percent(),
++                "current_usage": last_usage.map(|usage| json!({
++                    "input_tokens": usage.input_tokens,
++                    "cached_input_tokens": usage.cached_input_tokens,
++                    "output_tokens": usage.output_tokens,
++                    "reasoning_output_tokens": usage.reasoning_output_tokens,
++                    "total_tokens": usage.total_tokens,
++                })),
++                "total_input_tokens": total_usage.map(|usage| usage.input_tokens),
++                "total_output_tokens": total_usage.map(|usage| usage.output_tokens),
++            },
++            "codex": {
++                "plan_type": self.plan_type,
++                "run_state": self.run_state_status_text(),
++                "thread_name": self.thread_name.as_deref(),
++            },
++        }));
++    }
++
++    /// Maps the Codex limit windows onto Claude-style `five_hour` / `seven_day` keys.
++    pub(super) fn publish_status_line_command_rate_limits(&self, snapshot: &RateLimitSnapshot) {
++        let Some(command) = self.status_line_command.as_ref() else {
++            return;
++        };
++        let mut limits = serde_json::Map::new();
++        for (window, fallback_key) in [
++            (snapshot.primary.as_ref(), "five_hour"),
++            (snapshot.secondary.as_ref(), "seven_day"),
++        ] {
++            let Some(window) = window else {
++                continue;
++            };
++            let key = match window.window_duration_mins {
++                Some(minutes) if minutes <= SHORT_WINDOW_MAX_MINUTES => "five_hour",
++                Some(_) => "seven_day",
++                None => fallback_key,
++            };
++            limits.entry(key).or_insert_with(|| {
++                json!({
++                    "used_percentage": window.used_percent,
++                    "resets_at": window.resets_at,
++                    "window_minutes": window.window_duration_mins,
++                })
++            });
++        }
++        if let Some(plan_type) = self.plan_type {
++            limits.insert("plan_type".to_string(), json!(plan_type));
++        }
++        command.set_rate_limits(limits);
++    }
++}
+diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+index f84f875..20cd84d 100644
+--- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
++++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+@@ -304,6 +304,7 @@ impl ChatWidget {
+         self.sync_status_surface_shared_state(&selections);
+         self.refresh_status_line_from_selections(&selections);
+         self.refresh_terminal_title_from_selections(&selections);
++        self.publish_status_line_command_input();
+     }
+ 
+     /// Recomputes and emits the terminal title from config and runtime state.
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index 83f5c1a..7fd29fc 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -206,6 +206,7 @@ mod startup_presentation;
+ mod startup_recovery;
+ mod status;
+ mod status_indicator_widget;
++mod status_line_command;
+ mod streaming;
+ mod style;
+ mod system_motion;
+diff --git a/codex-rs/tui/src/local_settings.rs b/codex-rs/tui/src/local_settings.rs
+index aab1614..b105144 100644
+--- a/codex-rs/tui/src/local_settings.rs
++++ b/codex-rs/tui/src/local_settings.rs
+@@ -75,6 +75,7 @@ impl LocalSettings {
+                 alternate_screen: config.tui_alternate_screen,
+                 status_line: config.tui_status_line.clone(),
+                 status_line_use_colors: config.tui_status_line_use_colors,
++                status_line_command: config.tui_status_line_command.clone(),
+                 terminal_title: config.tui_terminal_title.clone(),
+                 theme: config.tui_theme.clone(),
+                 pet: config.tui_pet.clone(),
+diff --git a/codex-rs/tui/src/status_line_command.rs b/codex-rs/tui/src/status_line_command.rs
+new file mode 100644
+index 0000000..3cc0912
+--- /dev/null
++++ b/codex-rs/tui/src/status_line_command.rs
+@@ -0,0 +1,221 @@
++//! Command-backed status HUD rendered below the composer (`tui.status_line_command`).
++//!
++//! Mirrors Claude Code's `statusLine` command: the configured shell command receives a JSON
++//! snapshot of the session on stdin and its stdout (multiple ANSI-colored lines allowed) is
++//! rendered verbatim under the composer. The command re-runs about once per second, and shortly
++//! after the session snapshot changes, on a background task so rendering never blocks on it.
++
++use std::path::PathBuf;
++use std::process::Stdio;
++use std::sync::Arc;
++use std::sync::Mutex;
++use std::sync::Weak;
++use std::time::Duration;
++
++use ratatui::buffer::Buffer;
++use ratatui::layout::Rect;
++use ratatui::text::Line;
++use ratatui::widgets::Paragraph;
++use ratatui::widgets::Widget;
++use serde_json::Value;
++use tokio::io::AsyncWriteExt;
++use tokio::sync::Notify;
++
++use crate::bottom_pane::inset_footer_hint_area;
++use crate::render::renderable::Renderable;
++use crate::tui::FrameRequester;
++
++const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
++const INPUT_DEBOUNCE: Duration = Duration::from_millis(150);
++const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
++const MAX_LINES: usize = 10;
++
++#[derive(Default)]
++struct State {
++    input: Option<Value>,
++    rate_limits: Option<Value>,
++    lines: Vec<Line<'static>>,
++}
++
++struct Shared {
++    state: Mutex<State>,
++    notify: Arc<Notify>,
++}
++
++/// Handle to the background runner. Cloning shares the same runner; the runner stops once every
++/// handle has been dropped.
++#[derive(Clone)]
++pub(crate) struct StatusLineCommand {
++    shared: Arc<Shared>,
++}
++
++impl StatusLineCommand {
++    pub(crate) fn spawn(command: String, frame_requester: FrameRequester) -> Self {
++        let shared = Arc::new(Shared {
++            state: Mutex::new(State::default()),
++            notify: Arc::new(Notify::new()),
++        });
++        tokio::spawn(run_loop(command, Arc::downgrade(&shared), frame_requester));
++        Self { shared }
++    }
++
++    /// Replaces the session snapshot passed to the command; wakes the runner when it changed.
++    pub(crate) fn set_input(&self, input: Value) {
++        let mut state = self.lock();
++        if state.input.as_ref() != Some(&input) {
++            state.input = Some(input);
++            self.shared.notify.notify_one();
++        }
++    }
++
++    /// Merges limit windows into the last known set; rolling updates can be sparse, so a window
++    /// missing from one update keeps its previous value.
++    pub(crate) fn set_rate_limits(&self, rate_limits: serde_json::Map<String, Value>) {
++        let mut state = self.lock();
++        let mut merged = match state.rate_limits.clone() {
++            Some(Value::Object(map)) => map,
++            _ => serde_json::Map::new(),
++        };
++        merged.extend(rate_limits);
++        let merged = Value::Object(merged);
++        if state.rate_limits.as_ref() != Some(&merged) {
++            state.rate_limits = Some(merged);
++            self.shared.notify.notify_one();
++        }
++    }
++
++    pub(crate) fn hud(&self) -> Option<StatusLineHud> {
++        let lines = self.lock().lines.clone();
++        (!lines.is_empty()).then_some(StatusLineHud { lines })
++    }
++
++    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
++        self.shared
++            .state
++            .lock()
++            .unwrap_or_else(std::sync::PoisonError::into_inner)
++    }
++}
++
++/// The most recent command output, laid out with the footer's left inset.
++pub(crate) struct StatusLineHud {
++    lines: Vec<Line<'static>>,
++}
++
++impl Renderable for StatusLineHud {
++    fn render(&self, area: Rect, buf: &mut Buffer) {
++        Paragraph::new(self.lines.clone()).render(inset_footer_hint_area(area), buf);
++    }
++
++    fn desired_height(&self, _width: u16) -> u16 {
++        u16::try_from(self.lines.len()).unwrap_or(u16::MAX)
++    }
++}
++
++async fn run_loop(command: String, shared: Weak<Shared>, frame_requester: FrameRequester) {
++    let Some(notify) = shared.upgrade().map(|shared| Arc::clone(&shared.notify)) else {
++        return;
++    };
++    let mut first_run = true;
++    loop {
++        if !first_run {
++            tokio::select! {
++                () = notify.notified() => tokio::time::sleep(INPUT_DEBOUNCE).await,
++                () = tokio::time::sleep(REFRESH_INTERVAL) => {}
++            }
++        }
++        first_run = false;
++
++        let Some((stdin_json, cwd)) = shared.upgrade().map(|shared| snapshot(&shared)) else {
++            return;
++        };
++        let lines = run_command(&command, cwd, stdin_json)
++            .await
++            .map(|stdout| parse_lines(&stdout));
++        let Some(shared) = shared.upgrade() else {
++            return;
++        };
++        if let Some(lines) = lines {
++            let mut state = shared
++                .state
++                .lock()
++                .unwrap_or_else(std::sync::PoisonError::into_inner);
++            if state.lines != lines {
++                state.lines = lines;
++                frame_requester.schedule_frame();
++            }
++        }
++    }
++}
++
++fn snapshot(shared: &Shared) -> (String, Option<PathBuf>) {
++    let state = shared
++        .state
++        .lock()
++        .unwrap_or_else(std::sync::PoisonError::into_inner);
++    let mut payload = match state.input.clone() {
++        Some(Value::Object(map)) => map,
++        _ => serde_json::Map::new(),
++    };
++    if let Some(rate_limits) = state.rate_limits.clone() {
++        payload.insert("rate_limits".to_string(), rate_limits);
++    }
++    let cwd = payload
++        .get("cwd")
++        .and_then(Value::as_str)
++        .map(PathBuf::from)
++        .filter(|cwd| cwd.is_dir());
++    (Value::Object(payload).to_string(), cwd)
++}
++
++fn parse_lines(stdout: &str) -> Vec<Line<'static>> {
++    stdout
++        .trim_end_matches(['\r', '\n'])
++        .lines()
++        .take(MAX_LINES)
++        .map(|line| codex_ansi_escape::ansi_escape_line(line.trim_end_matches('\r')))
++        .collect()
++}
++
++async fn run_command(command: &str, cwd: Option<PathBuf>, stdin_json: String) -> Option<String> {
++    let mut cmd = shell_command(command);
++    if let Some(cwd) = cwd {
++        cmd.current_dir(cwd);
++    }
++    cmd.stdin(Stdio::piped())
++        .stdout(Stdio::piped())
++        .stderr(Stdio::null())
++        .kill_on_drop(true);
++    let mut child = cmd.spawn().ok()?;
++    if let Some(mut stdin) = child.stdin.take() {
++        // A command that ignores stdin may exit before reading it; that is fine.
++        let _ = stdin.write_all(stdin_json.as_bytes()).await;
++    }
++    let output = tokio::time::timeout(COMMAND_TIMEOUT, child.wait_with_output())
++        .await
++        .ok()?
++        .ok()?;
++    output
++        .status
++        .success()
++        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
++}
++
++#[cfg(windows)]
++fn shell_command(command: &str) -> tokio::process::Command {
++    use std::os::windows::process::CommandExt;
++    // Keep the child off Codex's console so it cannot touch the TUI's console modes.
++    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
++    let mut cmd = std::process::Command::new("cmd");
++    cmd.args(["/D", "/S", "/C"])
++        .raw_arg(format!("\"{command}\""))
++        .creation_flags(CREATE_NO_WINDOW);
++    tokio::process::Command::from(cmd)
++}
++
++#[cfg(not(windows))]
++fn shell_command(command: &str) -> tokio::process::Command {
++    let mut cmd = tokio::process::Command::new("sh");
++    cmd.arg("-c").arg(command);
++    cmd
++}

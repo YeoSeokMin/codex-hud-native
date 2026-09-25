@@ -1,0 +1,1245 @@
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index 62266f8..e2dd7da 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -2196,7 +2196,7 @@ impl App {
+                                     ));
+                             }
+                                 self.chat_widget.add_plain_history_lines(vec![
+-                                    Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
++                                    Line::from(vec!["● ".dim(), "Sandbox ready".into()]),
+                                     Line::from(vec![
+                                         "  ".into(),
+                                         "Codex can now safely edit files and execute commands in your computer"
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
+index 42937b1..7b447c7 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
+@@ -4904,8 +4904,14 @@ impl ChatComposer {
+         if let Some((warning_area, line)) = warning_notice {
+             line.render(warning_area, buf);
+         }
+-        let style = user_message_style();
+-        Block::default().style(style).render(composer_rect, buf);
++        // Claude-style input: dim horizontal rules above and below instead of a filled band.
++        let style = Style::default();
++        if composer_rect.height >= 2 {
++            let rule = "─".repeat(usize::from(composer_rect.width)).dim();
++            for y in [composer_rect.y, composer_rect.bottom() - 1] {
++                buf.set_span(composer_rect.x, y, &rule, composer_rect.width);
++            }
++        }
+         if !remote_images_rect.is_empty() {
+             Paragraph::new(self.attachments.remote_image_lines())
+                 .style(style)
+@@ -4917,7 +4923,7 @@ impl ChatComposer {
+                     Span::from("!").light_red().bold()
+                 } else if self.luna_reserve_active {
+                     // Reserve keeps one arrow at every reasoning effort; only its foreground changes.
+-                    "›"
++                    ">"
+                         .fg(crate::terminal_palette::best_color((246, 197, 67)))
+                         .bold()
+                 } else if let Some(tier) = self.effort_tier {
+@@ -4928,10 +4934,10 @@ impl ChatComposer {
+                         .unwrap_or(1.0);
+                     tier.prompt(charge)
+                 } else {
+-                    "›".bold()
++                    ">".bold()
+                 }
+             } else {
+-                "›".dim()
++                ">".dim()
+             };
+             buf.set_span(
+                 textarea_rect.x - LIVE_PREFIX_COLS,
+diff --git a/codex-rs/tui/src/bottom_pane/effort_ignition.rs b/codex-rs/tui/src/bottom_pane/effort_ignition.rs
+index 56658fc..26266eb 100644
+--- a/codex-rs/tui/src/bottom_pane/effort_ignition.rs
++++ b/codex-rs/tui/src/bottom_pane/effort_ignition.rs
+@@ -104,8 +104,8 @@ impl EffortTier {
+ 
+     fn prompt_glyph(self) -> &'static str {
+         match self {
+-            Self::Max => "›",
+-            Self::Ultra => "»",
++            Self::Max => ">",
++            Self::Ultra => ">",
+         }
+     }
+ 
+diff --git a/codex-rs/tui/src/bottom_pane/hook_status.rs b/codex-rs/tui/src/bottom_pane/hook_status.rs
+index 2552ea3..a4d900b 100644
+--- a/codex-rs/tui/src/bottom_pane/hook_status.rs
++++ b/codex-rs/tui/src/bottom_pane/hook_status.rs
+@@ -17,7 +17,7 @@ pub(super) struct HookStatus<'a> {
+ 
+ impl Renderable for HookStatus<'_> {
+     fn render(&self, area: Rect, buf: &mut Buffer) {
+-        let mut spans = vec!["• ".dim()];
++        let mut spans = vec!["● ".dim()];
+         spans.extend(shimmer_text(
+             &capitalize_first(self.message),
+             MotionMode::from_animations_enabled(self.animations_enabled),
+diff --git a/codex-rs/tui/src/bottom_pane/pending_input_preview.rs b/codex-rs/tui/src/bottom_pane/pending_input_preview.rs
+index 93328d5..8260518 100644
+--- a/codex-rs/tui/src/bottom_pane/pending_input_preview.rs
++++ b/codex-rs/tui/src/bottom_pane/pending_input_preview.rs
+@@ -73,7 +73,7 @@ impl PendingInputPreview {
+     }
+ 
+     fn push_section_header(lines: &mut Vec<Line<'static>>, width: u16, header: Line<'static>) {
+-        let mut spans = vec!["• ".dim()];
++        let mut spans = vec!["● ".dim()];
+         spans.extend(header.spans);
+         lines.extend(adaptive_wrap_lines(
+             std::iter::once(Line::from(spans)),
+diff --git a/codex-rs/tui/src/chatwidget/realtime_split_flap.rs b/codex-rs/tui/src/chatwidget/realtime_split_flap.rs
+index 50f0b8c..d691927 100644
+--- a/codex-rs/tui/src/chatwidget/realtime_split_flap.rs
++++ b/codex-rs/tui/src/chatwidget/realtime_split_flap.rs
+@@ -201,7 +201,7 @@ impl SplitFlapTranscriptCell {
+                     } else {
+                         if grapheme == "›" {
+                             style = style.fg(span.style.fg.unwrap_or(Color::Cyan));
+-                        } else if grapheme == "•" {
++                        } else if grapheme == "●" {
+                             style = style.fg(Color::Magenta);
+                         }
+                         if grapheme.chars().all(char::is_whitespace) {
+diff --git a/codex-rs/tui/src/chatwidget/replay.rs b/codex-rs/tui/src/chatwidget/replay.rs
+index ccb5b77..fa24116 100644
+--- a/codex-rs/tui/src/chatwidget/replay.rs
++++ b/codex-rs/tui/src/chatwidget/replay.rs
+@@ -444,7 +444,7 @@ impl ChatWidget {
+                 {
+                     self.add_to_history(history_cell::PrefixedWrappedHistoryCell::new(
+                         format!("Sent by Codex from task {source_thread_id}\n{prompt}"),
+-                        "• ".dim(),
++                        "● ".dim(),
+                         "  ",
+                     ));
+                 }
+diff --git a/codex-rs/tui/src/chatwidget/session_flow.rs b/codex-rs/tui/src/chatwidget/session_flow.rs
+index e170150..5924295 100644
+--- a/codex-rs/tui/src/chatwidget/session_flow.rs
++++ b/codex-rs/tui/src/chatwidget/session_flow.rs
+@@ -283,7 +283,7 @@ impl ChatWidget {
+             && !name.trim().is_empty()
+         {
+             vec![
+-                "• ".dim(),
++                "● ".dim(),
+                 "Thread forked from ".into(),
+                 name.fg(accent_color()),
+                 " (".into(),
+@@ -293,7 +293,7 @@ impl ChatWidget {
+             .into()
+         } else {
+             vec![
+-                "• ".dim(),
++                "● ".dim(),
+                 "Thread forked from ".into(),
+                 forked_from_id_text.fg(accent_color()),
+             ]
+@@ -359,7 +359,7 @@ impl ChatWidget {
+ 
+     pub(crate) fn emit_prompt_edit_thread_event(&mut self) {
+         let line: Line<'static> = vec![
+-            "• ".dim(),
++            "● ".dim(),
+             "Conversation reverted to this point. File changes are unchanged.".into(),
+         ]
+         .into();
+diff --git a/codex-rs/tui/src/chatwidget/tests/composer_submission.rs b/codex-rs/tui/src/chatwidget/tests/composer_submission.rs
+index 95b6ea1..9ceefe2 100644
+--- a/codex-rs/tui/src/chatwidget/tests/composer_submission.rs
++++ b/codex-rs/tui/src/chatwidget/tests/composer_submission.rs
+@@ -2854,7 +2854,7 @@ fn image_preparation_keeps_input_responsive_and_preserves_pending_input() {
+                     assert_chatwidget_snapshot!(
+                         "image_preparation_disconnected",
+                         normalize_snapshot_paths(render_bottom_popup(&chat, /*width*/ 80))
+-                            .replace('◦', "•")
++                            .replace('◦', "●")
+                     );
+                     chat.on_images_prepared(id);
+                 } else {
+diff --git a/codex-rs/tui/src/chatwidget/tests/history_replay.rs b/codex-rs/tui/src/chatwidget/tests/history_replay.rs
+index ad26ff9..d5795ed 100644
+--- a/codex-rs/tui/src/chatwidget/tests/history_replay.rs
++++ b/codex-rs/tui/src/chatwidget/tests/history_replay.rs
+@@ -1380,7 +1380,7 @@ async fn failed_repl_mcp_tool_call_preserves_status_and_result() {
+         assert_eq!(
+             lines.first(),
+             Some(&Line::from(vec![
+-                "•".red().bold(),
++                "●".red().bold(),
+                 " ".into(),
+                 "Inspect workspace".fg(crate::style::accent_color()),
+             ])),
+diff --git a/codex-rs/tui/src/chatwidget/turn_runtime.rs b/codex-rs/tui/src/chatwidget/turn_runtime.rs
+index d473394..f335e41 100644
+--- a/codex-rs/tui/src/chatwidget/turn_runtime.rs
++++ b/codex-rs/tui/src/chatwidget/turn_runtime.rs
+@@ -62,7 +62,7 @@ impl ChatWidget {
+     pub(super) fn log_websocket_timing_totals(&mut self, delta: RuntimeMetricsSummary) {
+         if let Some(label) = history_cell::runtime_metrics_label(delta.responses_api_summary()) {
+             self.add_plain_history_lines(vec![
+-                vec!["• ".dim(), format!("WebSocket timing: {label}").dark_gray()].into(),
++                vec!["● ".dim(), format!("WebSocket timing: {label}").dark_gray()].into(),
+             ]);
+         }
+     }
+diff --git a/codex-rs/tui/src/diff_render.rs b/codex-rs/tui/src/diff_render.rs
+index 395a874..3337877 100644
+--- a/codex-rs/tui/src/diff_render.rs
++++ b/codex-rs/tui/src/diff_render.rs
+@@ -461,7 +461,7 @@ fn render_changes_block(
+     let total_removed: usize = rows.iter().map(|r| r.removed).sum();
+     let file_count = rows.len();
+     let noun = if file_count == 1 { "file" } else { "files" };
+-    let mut header_spans: Vec<RtSpan<'static>> = vec!["• ".dim()];
++    let mut header_spans: Vec<RtSpan<'static>> = vec!["● ".dim()];
+     if let [row] = &rows[..] {
+         let verb = match row.change {
+             FileChange::Add { .. } => "Added",
+@@ -489,7 +489,7 @@ fn render_changes_block(
+         let skip_file_header = file_count == 1;
+         if !skip_file_header {
+             let mut header: Vec<RtSpan<'static>> = Vec::new();
+-            header.push("  └ ".dim());
++            header.push("  ⎿ ".dim());
+             header.extend(render_path(&r));
+             header.push(" ".into());
+             header.extend(render_line_count_summary(r.added, r.removed));
+diff --git a/codex-rs/tui/src/exec_cell/compact.rs b/codex-rs/tui/src/exec_cell/compact.rs
+index 87eb6d6..271f7ec 100644
+--- a/codex-rs/tui/src/exec_cell/compact.rs
++++ b/codex-rs/tui/src/exec_cell/compact.rs
+@@ -59,16 +59,16 @@ impl ExecCell {
+         }
+         let failed = call.output.as_ref().filter(|output| output.exit_code != 0);
+         let marker = if failed.is_some() {
+-            "•".red().bold()
++            "●".red().bold()
+         } else if self.is_active() {
+             activity_indicator(
+                 call.start_time,
+                 MotionMode::from_animations_enabled(self.animations_enabled()),
+                 ReducedMotionIndicator::StaticBullet,
+             )
+-            .unwrap_or_else(|| "•".dim())
++            .unwrap_or_else(|| "●".dim())
+         } else {
+-            "•".green().bold()
++            "●".green().bold()
+         };
+         let title = if let Some(output) = failed {
+             format!("Failed (exit {})", output.exit_code)
+@@ -96,7 +96,7 @@ impl ExecCell {
+                 let mut line = ansi_escape_line(raw.as_ref());
+                 line.spans.insert(
+                     /*index*/ 0,
+-                    if index == 0 { "  └ " } else { "    " }.dim(),
++                    if index == 0 { "  ⎿ " } else { "    " }.dim(),
+                 );
+                 line.spans.iter_mut().for_each(|span| {
+                     span.style = span.style.add_modifier(Modifier::DIM);
+@@ -104,7 +104,7 @@ impl ExecCell {
+                 lines.push(clipped_line(line, width));
+             }
+             if lines.len() == 1 && !call.is_unified_exec_interaction() {
+-                lines.push(clipped_line(Line::from("  └ (no output)".dim()), width));
++                lines.push(clipped_line(Line::from("  ⎿ (no output)".dim()), width));
+             }
+         }
+         lines
+diff --git a/codex-rs/tui/src/exec_cell/render.rs b/codex-rs/tui/src/exec_cell/render.rs
+index 86d66a8..275fa78 100644
+--- a/codex-rs/tui/src/exec_cell/render.rs
++++ b/codex-rs/tui/src/exec_cell/render.rs
+@@ -149,7 +149,7 @@ pub(crate) fn output_lines(
+         let prefix = if !include_prefix {
+             ""
+         } else if i == 0 && include_angle_pipe {
+-            "  └ "
++            "  ⎿ "
+         } else {
+             "    "
+         };
+@@ -205,7 +205,7 @@ fn activity_marker(start_time: Option<Instant>, animations_enabled: bool) -> Spa
+         MotionMode::from_animations_enabled(animations_enabled),
+         ReducedMotionIndicator::StaticBullet,
+     )
+-    .unwrap_or_else(|| "•".dim())
++    .unwrap_or_else(|| "●".dim())
+ }
+ 
+ impl HistoryCell for ExecCell {
+@@ -315,7 +315,7 @@ impl ExecCell {
+                 if self.is_active() {
+                     activity_marker(self.active_start_time(), self.animations_enabled())
+                 } else {
+-                    "•".dim()
++                    "●".dim()
+                 },
+                 " ".into(),
+                 if self.is_active() {
+@@ -439,7 +439,7 @@ impl ExecCell {
+ 
+         out.extend(prefix_hyperlink_lines(
+             out_indented,
+-            "  └ ".dim(),
++            "  ⎿ ".dim(),
+             "    ".into(),
+         ));
+         out
+@@ -458,8 +458,8 @@ impl ExecCell {
+             .duration
+             .and_then(|_| call.output.as_ref().map(|o| o.exit_code == 0));
+         let bullet = match success {
+-            Some(true) => "•".green().bold(),
+-            Some(false) => "•".red().bold(),
++            Some(true) => "●".green().bold(),
++            Some(false) => "●".red().bold(),
+             None => activity_marker(call.start_time, self.animations_enabled()),
+         };
+         let is_interaction = call.is_unified_exec_interaction();
+@@ -830,7 +830,7 @@ impl ExecDisplayLayout {
+ const EXEC_DISPLAY_LAYOUT: ExecDisplayLayout = ExecDisplayLayout::new(
+     PrefixedBlock::new("  │ ", "  │ "),
+     /*command_continuation_max_lines*/ 2,
+-    PrefixedBlock::new("  └ ", "    "),
++    PrefixedBlock::new("  ⎿ ", "    "),
+ );
+ 
+ #[cfg(test)]
+@@ -953,7 +953,7 @@ mod tests {
+     #[test]
+     fn truncate_lines_middle_keeps_omitted_count_in_line_units() {
+         let lines = vec![
+-            Line::from("  └ short"),
++            Line::from("  ⎿ short"),
+             Line::from("    this-is-a-very-long-token-that-wraps-many-rows"),
+             Line::from(format!(
+                 "    {}",
+@@ -1157,7 +1157,7 @@ mod tests {
+ 
+     #[test]
+     fn truncate_lines_middle_does_not_truncate_blank_prefixed_output_lines() {
+-        let mut lines = vec![Line::from("  └ start")];
++        let mut lines = vec![Line::from("  ⎿ start")];
+         lines.extend(std::iter::repeat_n(Line::from("    "), 26));
+         lines.push(Line::from("    end"));
+ 
+diff --git a/codex-rs/tui/src/external_agent_config_migration/flow.rs b/codex-rs/tui/src/external_agent_config_migration/flow.rs
+index ebaf050..37e523a 100644
+--- a/codex-rs/tui/src/external_agent_config_migration/flow.rs
++++ b/codex-rs/tui/src/external_agent_config_migration/flow.rs
+@@ -146,7 +146,7 @@ fn external_agent_config_migration_started_lines(
+ 
+     let mut lines = vec![
+         vec![
+-            "• ".dim(),
++            "● ".dim(),
+             "Import started.".cyan(),
+             " You can keep working while it finishes.".into(),
+         ]
+@@ -202,7 +202,7 @@ pub(crate) fn external_agent_config_migration_finished_lines(
+     };
+     let mut lines = vec![
+         vec![
+-            "• ".dim(),
++            "● ".dim(),
+             "Import finished: ".into(),
+             format!("{imported_count} imported").green(),
+             ", ".into(),
+diff --git a/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs b/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs
+index bc5cc6d..114bf34 100644
+--- a/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs
++++ b/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs
+@@ -225,7 +225,7 @@ fn external_agent_config_migration_status_lines_use_semantic_colors() {
+         ),
+         vec![
+             Line::from(vec![
+-                "• ".dim(),
++                "● ".dim(),
+                 "Import started.".cyan(),
+                 " You can keep working while it finishes.".into(),
+             ]),
+@@ -287,7 +287,7 @@ fn external_agent_config_migration_status_lines_use_semantic_colors() {
+         external_agent_config_migration_finished_lines(&completed_notification()),
+         vec![
+             Line::from(vec![
+-                "• ".dim(),
++                "● ".dim(),
+                 "Import finished: ".into(),
+                 "4 imported".green(),
+                 ", ".into(),
+diff --git a/codex-rs/tui/src/history_cell/computer_activity.rs b/codex-rs/tui/src/history_cell/computer_activity.rs
+index e25d57b..e3bb0e6 100644
+--- a/codex-rs/tui/src/history_cell/computer_activity.rs
++++ b/codex-rs/tui/src/history_cell/computer_activity.rs
+@@ -168,7 +168,7 @@ impl HistoryCell for ComputerActivityCell {
+                     ReducedMotionIndicator::StaticBullet,
+                 )
+             })
+-            .unwrap_or_else(|| "•".dim());
++            .unwrap_or_else(|| "●".dim());
+         let label = if active.is_some() {
+             "Using computer"
+         } else {
+diff --git a/codex-rs/tui/src/history_cell/dynamic.rs b/codex-rs/tui/src/history_cell/dynamic.rs
+index 9c5c603..71a9f40 100644
+--- a/codex-rs/tui/src/history_cell/dynamic.rs
++++ b/codex-rs/tui/src/history_cell/dynamic.rs
+@@ -138,12 +138,12 @@ impl DynamicToolCallData {
+ 
+     fn header(&self) -> Line<'static> {
+         let (marker, verb) = if self.interrupted {
+-            ("•".red().bold(), "Interrupted")
++            ("●".red().bold(), "Interrupted")
+         } else {
+             match self.status {
+-                DynamicToolCallStatus::InProgress => ("•".dim(), "Calling"),
+-                DynamicToolCallStatus::Completed => ("•".green(), "Called"),
+-                DynamicToolCallStatus::Failed => ("•".red().bold(), "Failed"),
++                DynamicToolCallStatus::InProgress => ("●".dim(), "Calling"),
++                DynamicToolCallStatus::Completed => ("●".green(), "Called"),
++                DynamicToolCallStatus::Failed => ("●".red().bold(), "Failed"),
+             }
+         };
+         let mut line = Line::from(vec![
+@@ -220,7 +220,7 @@ impl HistoryCell for DynamicToolCallCell {
+         for (index, mut line) in output.into_iter().enumerate() {
+             line.spans.insert(
+                 /*index*/ 0,
+-                if index == 0 { "  └ " } else { "    " }.dim(),
++                if index == 0 { "  ⎿ " } else { "    " }.dim(),
+             );
+             lines.push(clipped_line(line.dim(), width));
+         }
+@@ -242,7 +242,7 @@ impl HistoryCell for DynamicToolCallCell {
+         lines.extend(adaptive_wrap_hyperlink_lines(
+             &plain_hyperlink_lines(details),
+             RtOptions::new(usize::from(width).max(/*other*/ 1))
+-                .initial_indent("  └ ".dim().into())
++                .initial_indent("  ⎿ ".dim().into())
+                 .subsequent_indent("    ".into()),
+         ));
+         lines
+diff --git a/codex-rs/tui/src/history_cell/exec.rs b/codex-rs/tui/src/history_cell/exec.rs
+index c1a46d2..3c5d9ec 100644
+--- a/codex-rs/tui/src/history_cell/exec.rs
++++ b/codex-rs/tui/src/history_cell/exec.rs
+@@ -67,7 +67,7 @@ impl HistoryCell for UnifiedExecInteractionCell {
+         let input_wrapped = adaptive_wrap_hyperlink_lines(
+             &plain_hyperlink_lines(input_lines),
+             RtOptions::new(wrap_width)
+-                .initial_indent(Line::from("  └ ".dim()))
++                .initial_indent(Line::from("  ⎿ ".dim()))
+                 .subsequent_indent(Line::from("    ".dim())),
+         );
+         out.extend(input_wrapped);
+diff --git a/codex-rs/tui/src/history_cell/hook_cell.rs b/codex-rs/tui/src/history_cell/hook_cell.rs
+index 04c0946..c68110f 100644
+--- a/codex-rs/tui/src/history_cell/hook_cell.rs
++++ b/codex-rs/tui/src/history_cell/hook_cell.rs
+@@ -302,7 +302,7 @@ impl HookCell {
+                     .into(),
+                 );
+                 if let Some(first_line) = system_message_lines.as_mut().and_then(Iterator::next) {
+-                    lines.push(format!("{HOOK_OUTPUT_INDENT}└ {first_line}").into());
++                    lines.push(format!("{HOOK_OUTPUT_INDENT}⎿ {first_line}").into());
+                 }
+             }
+             if let Some(system_message_lines) = system_message_lines {
+@@ -376,7 +376,7 @@ impl HookRunCell {
+ fn push_full_hook_output_entry(lines: &mut Vec<Line<'static>>, entry: &HookOutputEntry) {
+     let mut output_lines = entry.text.split('\n');
+     if let Some(first_line) = output_lines.next() {
+-        lines.push(format!("{HOOK_OUTPUT_INDENT}└ {first_line}").into());
++        lines.push(format!("{HOOK_OUTPUT_INDENT}⎿ {first_line}").into());
+     }
+     for line in output_lines {
+         if line.is_empty() {
+@@ -511,9 +511,9 @@ fn hook_run_is_quiet_success(run: &HookRunSummary) -> bool {
+ 
+ fn hook_completed_bullet(status: HookRunStatus) -> Span<'static> {
+     match status {
+-        HookRunStatus::Completed => "•".green().bold(),
+-        HookRunStatus::Blocked | HookRunStatus::Failed | HookRunStatus::Stopped => "•".red().bold(),
+-        HookRunStatus::Running => "•".into(),
++        HookRunStatus::Completed => "●".green().bold(),
++        HookRunStatus::Blocked | HookRunStatus::Failed | HookRunStatus::Stopped => "●".red().bold(),
++        HookRunStatus::Running => "●".into(),
+     }
+ }
+ 
+@@ -665,7 +665,7 @@ mod tests {
+ 
+             assert_eq!(
+                 line_texts(&lines),
+-                vec![expected_header.to_string(), format!("  └ {detail}")],
++                vec![expected_header.to_string(), format!("  ⎿ {detail}")],
+             );
+             assert_eq!(lines[0].spans[0].style.fg, Some(Color::Red));
+             assert!(
+diff --git a/codex-rs/tui/src/history_cell/mcp.rs b/codex-rs/tui/src/history_cell/mcp.rs
+index 9f80e5e..1972f73 100644
+--- a/codex-rs/tui/src/history_cell/mcp.rs
++++ b/codex-rs/tui/src/history_cell/mcp.rs
+@@ -152,14 +152,14 @@ impl McpToolCallCell {
+         let node_repl = self.result_kind() == McpResultKind::NodeRepl;
+         let compact = node_repl && mode == McpToolCallRenderMode::Display;
+         let bullet = match status {
+-            Some(true) => "•".green().bold(),
+-            Some(false) => "•".red().bold(),
++            Some(true) => "●".green().bold(),
++            Some(false) => "●".red().bold(),
+             None => activity_indicator(
+                 Some(self.start_time),
+                 MotionMode::from_animations_enabled(self.animations_enabled),
+                 ReducedMotionIndicator::StaticBullet,
+             )
+-            .unwrap_or_else(|| "•".dim()),
++            .unwrap_or_else(|| "●".dim()),
+         };
+         let header_text = if status.is_some() {
+             "Called"
+@@ -216,7 +216,7 @@ impl McpToolCallCell {
+                 adaptive_wrap_hyperlink_lines(&[HyperlinkLine::new(invocation_line)], opts);
+             lines.extend(prefix_hyperlink_lines(
+                 body_lines,
+-                "  └ ".dim(),
++                "  ⎿ ".dim(),
+                 "    ".into(),
+             ));
+         }
+@@ -224,7 +224,7 @@ impl McpToolCallCell {
+         let detail_lines = self.render_detail_lines(width, mode);
+         if !detail_lines.is_empty() {
+             let initial_prefix = if inline_invocation {
+-                "  └ ".dim()
++                "  ⎿ ".dim()
+             } else {
+                 "    ".into()
+             };
+@@ -809,7 +809,7 @@ impl HistoryCell for McpInventoryLoadingCell {
+                     MotionMode::from_animations_enabled(self.animations_enabled),
+                     ReducedMotionIndicator::StaticBullet,
+                 )
+-                .unwrap_or_else(|| "•".dim()),
++                .unwrap_or_else(|| "●".dim()),
+                 " ".into(),
+                 "Loading MCP inventory".bold(),
+                 "…".dim(),
+diff --git a/codex-rs/tui/src/history_cell/mcp_preview.rs b/codex-rs/tui/src/history_cell/mcp_preview.rs
+index cffaf27..eb55122 100644
+--- a/codex-rs/tui/src/history_cell/mcp_preview.rs
++++ b/codex-rs/tui/src/history_cell/mcp_preview.rs
+@@ -20,15 +20,15 @@ impl McpToolCallCell {
+     pub(super) fn compact_mcp_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+         let status = self.success();
+         let (marker, verb) = match status {
+-            Some(true) => ("•".green().bold(), "Called"),
+-            Some(false) => ("•".red().bold(), "Failed"),
++            Some(true) => ("●".green().bold(), "Called"),
++            Some(false) => ("●".red().bold(), "Failed"),
+             None => (
+                 activity_indicator(
+                     Some(self.start_time),
+                     MotionMode::from_animations_enabled(self.animations_enabled),
+                     ReducedMotionIndicator::StaticBullet,
+                 )
+-                .unwrap_or_else(|| "•".dim()),
++                .unwrap_or_else(|| "●".dim()),
+                 "Calling",
+             ),
+         };
+@@ -121,7 +121,7 @@ impl McpToolCallCell {
+         for (index, detail) in details.into_iter().enumerate() {
+             lines.push(clipped_line(
+                 Line::from(vec![
+-                    if index == 0 { "  └ " } else { "    " }.dim(),
++                    if index == 0 { "  ⎿ " } else { "    " }.dim(),
+                     detail.dim(),
+                 ]),
+                 width,
+diff --git a/codex-rs/tui/src/history_cell/mcp_tests.rs b/codex-rs/tui/src/history_cell/mcp_tests.rs
+index dcf651f..b2f23c0 100644
+--- a/codex-rs/tui/src/history_cell/mcp_tests.rs
++++ b/codex-rs/tui/src/history_cell/mcp_tests.rs
+@@ -426,7 +426,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
+             .take(2)
+             .map(ToString::to_string)
+             .collect::<Vec<_>>(),
+-        vec!["  └ Returned", "    image"],
++        vec!["  ⎿ Returned", "    image"],
+     );
+ 
+     let compact = cell.compact_hyperlink_lines(/*width*/ 80);
+@@ -555,7 +555,7 @@ fn titled_image_call_keeps_error_and_full_title_when_narrow() {
+     );
+     let lines = cell.display_lines(/*width*/ 32);
+     assert!(lines[0].width() <= 32);
+-    assert_eq!(lines[0].spans[0].style, "•".red().bold().style);
++    assert_eq!(lines[0].spans[0].style, "●".red().bold().style);
+     insta::assert_snapshot!(
+         lines
+             .iter()
+@@ -659,7 +659,7 @@ fn mcp_result_preview_preserves_source_text_and_excludes_tree_gutters() {
+         assert!(
+             source
+                 .iter()
+-                .all(|line| !line.starts_with('•') && !line.starts_with("  └ "))
++                .all(|line| !line.starts_with('•') && !line.starts_with("  ⎿ "))
+         );
+     }
+ }
+diff --git a/codex-rs/tui/src/history_cell/messages.rs b/codex-rs/tui/src/history_cell/messages.rs
+index 1bdc477..5154840 100644
+--- a/codex-rs/tui/src/history_cell/messages.rs
++++ b/codex-rs/tui/src/history_cell/messages.rs
+@@ -4,7 +4,6 @@
+ use super::markdown_render_cache::MarkdownRenderCache;
+ use super::*;
+ use crate::style::accent_color_on;
+-use crate::style::history_prompt_style;
+ use crate::terminal_hyperlinks::annotate_web_urls_in_line;
+ use crate::terminal_hyperlinks::lines_with_sources_eq;
+ use crate::terminal_hyperlinks::remap_source_wrapped_line;
+@@ -199,7 +198,7 @@ impl HistoryCell for UserHistoryCell {
+             )
+             .max(/*other*/ 1);
+ 
+-        let style = history_prompt_style();
++        let style = Style::default();
+         let element_style = style.fg(accent_color_on(style.bg));
+ 
+         let wrapped_images = plain_hyperlink_lines(adaptive_wrap_lines(
+@@ -215,7 +214,7 @@ impl HistoryCell for UserHistoryCell {
+             return Vec::new();
+         }
+ 
+-        let mut lines = vec![HyperlinkLine::new(Line::from("").style(style))];
++        let mut lines = Vec::new();
+ 
+         if !wrapped_images.is_empty() {
+             lines.extend(prefix_hyperlink_lines(
+@@ -232,15 +231,14 @@ impl HistoryCell for UserHistoryCell {
+             lines.extend(prefix_hyperlink_lines(
+                 wrapped_message,
+                 if self.spoken {
+-                    "› ".red().bold()
++                    "> ".red().bold()
+                 } else {
+-                    "› ".bold().dim()
++                    "> ".dim()
+                 },
+                 "  ".into(),
+             ));
+         }
+ 
+-        lines.push(HyperlinkLine::new(Line::from("").style(style)));
+         for source in lines.iter_mut().filter_map(|line| line.source.as_mut()) {
+             source.right_reserve = 1;
+         }
+@@ -386,7 +384,7 @@ impl ReasoningSummaryCell {
+         crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
+             &summary_lines,
+             RtOptions::new(width as usize)
+-                .initial_indent("• ".dim().into())
++                .initial_indent("∴ ".dim().into())
+                 .subsequent_indent("  ".into()),
+         )
+     }
+@@ -454,7 +452,7 @@ impl HistoryCell for AgentMessageCell {
+         let mut wrapped = Vec::new();
+         for (index, line) in self.lines.iter().enumerate() {
+             let initial_indent = if index == 0 && self.is_first_line {
+-                "• ".dim().into()
++                "● ".into()
+             } else {
+                 "  ".into()
+             };
+@@ -584,12 +582,12 @@ impl AgentMarkdownCell {
+             else {
+                 return prefix_hyperlink_lines(
+                     vec![HyperlinkLine::new(Line::default())],
+-                    "• ".dim(),
++                    "● ".dim(),
+                     "  ".into(),
+                 );
+             };
+ 
+-            // Re-render markdown from source at the current width. Reserve 2 columns for the "• " /
++            // Re-render markdown from source at the current width. Reserve 2 columns for the "● " /
+             // " " prefix prepended below.
+             let lines = crate::markdown::render_markdown_agent_with_list_spacing(
+                 &self.markdown_source,
+@@ -607,7 +605,7 @@ impl AgentMarkdownCell {
+             };
+             normalize_whitespace_only_hyperlink_lines(prefix_hyperlink_lines(
+                 lines,
+-                "• ".dim(),
++                "● ".dim(),
+                 "  ".into(),
+             ))
+         };
+@@ -688,7 +686,7 @@ impl HistoryCell for StreamingAgentTailCell {
+         normalize_whitespace_only_hyperlink_lines(prefix_hyperlink_lines(
+             self.lines.clone(),
+             if self.is_first_line {
+-                "• ".dim()
++                "● ".dim()
+             } else {
+                 "  ".into()
+             },
+diff --git a/codex-rs/tui/src/history_cell/notices.rs b/codex-rs/tui/src/history_cell/notices.rs
+index a786340..a0b62ad 100644
+--- a/codex-rs/tui/src/history_cell/notices.rs
++++ b/codex-rs/tui/src/history_cell/notices.rs
+@@ -315,7 +315,7 @@ impl HistoryCell for DeprecationNoticeCell {
+     }
+ }
+ pub(crate) fn new_info_event(message: String, hint: Option<String>) -> PlainHistoryCell {
+-    let mut line = vec!["• ".dim(), message.into()];
++    let mut line = vec!["● ".dim(), message.into()];
+     if let Some(hint) = hint {
+         line.push(" ".into());
+         line.push(hint.dark_gray());
+@@ -356,7 +356,7 @@ impl HistoryCell for ThreadRecapLoadingCell {
+                     MotionMode::from_animations_enabled(self.animations_enabled),
+                     ReducedMotionIndicator::StaticBullet,
+                 )
+-                .unwrap_or_else(|| "•".dim()),
++                .unwrap_or_else(|| "●".dim()),
+                 " ".into(),
+                 "Generating conversation recap".bold(),
+                 "…".dim(),
+diff --git a/codex-rs/tui/src/history_cell/patches.rs b/codex-rs/tui/src/history_cell/patches.rs
+index 3569c7c..bf87b06 100644
+--- a/codex-rs/tui/src/history_cell/patches.rs
++++ b/codex-rs/tui/src/history_cell/patches.rs
+@@ -119,7 +119,7 @@ impl HistoryCell for PatchFailureCell {
+         lines.extend(crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
+             &plain_hyperlink_lines(diagnostics),
+             RtOptions::new(usize::from(width).max(/*other*/ 1))
+-                .initial_indent("  └ ".dim().into())
++                .initial_indent("  ⎿ ".dim().into())
+                 .subsequent_indent("    ".into()),
+         ));
+         lines
+@@ -166,7 +166,7 @@ pub(crate) struct ViewImageHistoryCell {
+ impl HistoryCell for ViewImageHistoryCell {
+     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+         let line = vec![
+-            "• ".dim(),
++            "● ".dim(),
+             "Viewed image ".bold(),
+             self.filename.replace(['\n', '\r', '\t'], " ").dim(),
+         ]
+@@ -180,7 +180,7 @@ impl HistoryCell for ViewImageHistoryCell {
+     fn transcript_lines(&self, width: u16) -> Vec<Line<'static>> {
+         PrefixedWrappedHistoryCell::new(
+             Line::from(vec!["Viewed image ".bold(), self.path_label.clone().dim()]),
+-            vec!["• ".dim()],
++            vec!["● ".dim()],
+             "  ",
+         )
+         .display_lines(width)
+@@ -212,14 +212,14 @@ pub(crate) fn new_image_generation_call(
+     let heading = if status == "failed" {
+         vec!["✗ ".red().bold(), "Image generation failed".bold()].into()
+     } else {
+-        vec!["• ".dim(), "Generated Image:".bold()].into()
++        vec!["● ".dim(), "Generated Image:".bold()].into()
+     };
+-    let mut lines: Vec<Line<'static>> = vec![heading, vec!["  └ ".dim(), detail.dim()].into()];
++    let mut lines: Vec<Line<'static>> = vec![heading, vec!["  ⎿ ".dim(), detail.dim()].into()];
+     if let Some(saved_path) = saved_path {
+         let saved_path = Url::from_file_path(saved_path.as_path())
+             .map(|url| url.to_string())
+             .unwrap_or_else(|_| saved_path.display().to_string());
+-        lines.push(vec!["  └ ".dim(), "Saved to: ".dim(), saved_path.into()].into());
++        lines.push(vec!["  ⎿ ".dim(), "Saved to: ".dim(), saved_path.into()].into());
+     }
+ 
+     PlainHistoryCell { lines }
+diff --git a/codex-rs/tui/src/history_cell/plans.rs b/codex-rs/tui/src/history_cell/plans.rs
+index 7f68f5c..341deb0 100644
+--- a/codex-rs/tui/src/history_cell/plans.rs
++++ b/codex-rs/tui/src/history_cell/plans.rs
+@@ -121,7 +121,7 @@ impl ProposedPlanCell {
+     ) -> Vec<HyperlinkLine> {
+         self.rendered_lines.render(width, list_spacing, || {
+             let mut lines = vec![
+-                HyperlinkLine::new(vec!["• ".dim(), "Proposed Plan".bold()].into()),
++                HyperlinkLine::new(vec!["● ".dim(), "Proposed Plan".bold()].into()),
+                 HyperlinkLine::new(Line::from(" ")),
+             ];
+ 
+@@ -231,7 +231,7 @@ impl HistoryCell for PlanUpdateCell {
+         let total = self.plan.len();
+         let mut lines = vec![clipped_line(
+             Line::from(vec![
+-                "• ".dim(),
++                "● ".dim(),
+                 "Updated Plan".bold(),
+                 format!(" · {completed}/{total} complete").dim(),
+             ]),
+@@ -252,7 +252,7 @@ impl HistoryCell for PlanUpdateCell {
+             let step = item.step.split_whitespace().collect::<Vec<_>>().join(" ");
+             lines.push(clipped_line(
+                 Line::from(vec![
+-                    if index == 0 { "  └ " } else { "    " }.dim(),
++                    if index == 0 { "  ⎿ " } else { "    " }.dim(),
+                     marker.set_style(style),
+                     step.set_style(style),
+                 ]),
+@@ -261,7 +261,7 @@ impl HistoryCell for PlanUpdateCell {
+         }
+         if self.plan.is_empty() {
+             lines.push(clipped_line(
+-                Line::from("  └ (no steps provided)".dim()),
++                Line::from("  ⎿ (no steps provided)".dim()),
+                 width,
+             ));
+         }
+@@ -300,7 +300,7 @@ impl HistoryCell for PlanUpdateCell {
+         };
+ 
+         let mut lines = vec![HyperlinkLine::new(
+-            vec!["• ".dim(), "Updated Plan".bold()].into(),
++            vec!["● ".dim(), "Updated Plan".bold()].into(),
+         )];
+ 
+         let mut indented_lines = vec![];
+@@ -324,7 +324,7 @@ impl HistoryCell for PlanUpdateCell {
+         }
+         lines.extend(prefix_hyperlink_lines(
+             indented_lines,
+-            "  └ ".dim(),
++            "  ⎿ ".dim(),
+             "    ".into(),
+         ));
+ 
+diff --git a/codex-rs/tui/src/history_cell/request_user_input.rs b/codex-rs/tui/src/history_cell/request_user_input.rs
+index 006ed07..d5b6bc9 100644
+--- a/codex-rs/tui/src/history_cell/request_user_input.rs
++++ b/codex-rs/tui/src/history_cell/request_user_input.rs
+@@ -30,7 +30,7 @@ impl HistoryCell for RequestUserInputResultCell {
+             .count();
+         let unanswered = total.saturating_sub(answered);
+ 
+-        let mut header = vec!["•".dim(), " ".into(), "Questions".bold()];
++        let mut header = vec!["●".dim(), " ".into(), "Questions".bold()];
+         header.push(format!(" {answered}/{total} answered").dim());
+         if self.interrupted {
+             header.push(" (interrupted)".fg(accent_color()));
+diff --git a/codex-rs/tui/src/history_cell/search.rs b/codex-rs/tui/src/history_cell/search.rs
+index e32ccd9..a89cf53 100644
+--- a/codex-rs/tui/src/history_cell/search.rs
++++ b/codex-rs/tui/src/history_cell/search.rs
+@@ -123,14 +123,14 @@ impl WebSearchCell {
+ impl HistoryCell for WebSearchCell {
+     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+         let bullet = if self.completed {
+-            "•".dim()
++            "●".dim()
+         } else {
+             activity_indicator(
+                 Some(self.start_time),
+                 MotionMode::from_animations_enabled(self.animations_enabled),
+                 ReducedMotionIndicator::StaticBullet,
+             )
+-            .unwrap_or_else(|| "•".dim())
++            .unwrap_or_else(|| "●".dim())
+         };
+         let mut line = Line::from(vec![bullet, " ".into()]);
+         let mut summary = self.summary();
+@@ -145,11 +145,11 @@ impl HistoryCell for WebSearchCell {
+     }
+ 
+     fn transcript_lines(&self, width: u16) -> Vec<Line<'static>> {
+-        PrefixedWrappedHistoryCell::new(self.summary(), vec!["• ".dim()], "  ").display_lines(width)
++        PrefixedWrappedHistoryCell::new(self.summary(), vec!["● ".dim()], "  ").display_lines(width)
+     }
+ 
+     fn transcript_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+-        PrefixedWrappedHistoryCell::new(self.summary(), vec!["• ".dim()], "  ")
++        PrefixedWrappedHistoryCell::new(self.summary(), vec!["● ".dim()], "  ")
+             .display_hyperlink_lines(width)
+     }
+ 
+diff --git a/codex-rs/tui/src/history_cell/separators.rs b/codex-rs/tui/src/history_cell/separators.rs
+index c1df997..ac00a9a 100644
+--- a/codex-rs/tui/src/history_cell/separators.rs
++++ b/codex-rs/tui/src/history_cell/separators.rs
+@@ -3,7 +3,6 @@
+ use super::*;
+ use crate::clock_format::ClockFormat;
+ use chrono::DateTime;
+-use chrono::Datelike;
+ use chrono::Local;
+ use chrono::NaiveDate;
+ 
+@@ -71,20 +70,8 @@ impl FinalMessageSeparator {
+             };
+             label_parts.push(format!("Worked for {elapsed}"));
+         }
+-        if let Some(completed_at) = self.completed_at {
+-            let date_format = if completed_at.date_naive() == today {
+-                ""
+-            } else if completed_at.year() == today.year() {
+-                "%b %-d at "
+-            } else {
+-                "%b %-d, %Y at "
+-            };
+-            label_parts.push(format!(
+-                "{}{}",
+-                completed_at.format(date_format),
+-                completed_at.format(self.clock_format.time_format()),
+-            ));
+-        }
++        // Wall-clock completion time is intentionally hidden (Claude-style transcript).
++        let _ = (today, self.completed_at, self.clock_format);
+         if let Some(metrics_label) = self.runtime_metrics.and_then(runtime_metrics_label) {
+             label_parts.push(metrics_label);
+         }
+@@ -98,9 +85,9 @@ impl HistoryCell for FinalMessageSeparator {
+         }
+         self.label(self.display_date)
+             .map(|label| {
+-                let indent = if width > 2 { "  " } else { "" };
++                let (initial, indent) = if width > 2 { ("✻ ", "  ") } else { ("", "") };
+                 let options = textwrap::Options::new(usize::from(width))
+-                    .initial_indent(indent)
++                    .initial_indent(initial)
+                     .subsequent_indent(indent);
+                 textwrap::wrap(&label, options)
+                     .into_iter()
+diff --git a/codex-rs/tui/src/history_cell/session.rs b/codex-rs/tui/src/history_cell/session.rs
+index a6d5eed..7c9c50a 100644
+--- a/codex-rs/tui/src/history_cell/session.rs
++++ b/codex-rs/tui/src/history_cell/session.rs
+@@ -360,13 +360,15 @@ impl HistoryCell for SessionHeaderHistoryCell {
+ 
+         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
+ 
+-        // Title line rendered inside the box: ">_ OpenAI Codex (vX)"
++        // Claude-style welcome card: orange "✻" title and border.
++        let orange = Style::default().fg(crate::terminal_palette::best_color((215, 119, 87)));
+         let title_spans: Vec<Span<'static>> = vec![
+-            Span::from(">_ ").dim(),
+-            Span::from("OpenAI Codex").bold(),
+-            Span::from(" ").dim(),
+-            Span::from(format!("(v{})", self.version)).dim(),
++            Span::styled("✻ ", orange),
++            Span::from("Welcome to Codex!").bold(),
++            Span::from(format!(" (v{})", self.version)).dim(),
+         ];
++        let help_spans: Vec<Span<'static>> =
++            vec![Span::from("  /help for help, /status for your current setup").dim()];
+ 
+         const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
+         const CHANGE_MODEL_HINT_EXPLANATION: &str = " to change";
+@@ -386,7 +388,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
+         let reasoning_label = self.reasoning_label();
+         let model_spans: Vec<Span<'static>> = {
+             let mut spans = vec![
+-                Span::from(format!("{model_label} ")).dim(),
++                Span::from(format!("  {model_label} ")).dim(),
+                 Span::styled(self.model.clone(), self.model_style),
+             ];
+             if let Some(reasoning) = reasoning_label {
+@@ -404,7 +406,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
+         };
+ 
+         let dir_label = format!("{DIR_LABEL:<label_width$}");
+-        let dir_prefix = format!("{dir_label} ");
++        let dir_prefix = format!("  {dir_label} ");
+         let dir_prefix_width = display_width(dir_prefix.as_str());
+         let dir_max_width = inner_width.saturating_sub(dir_prefix_width);
+         let dir = self.format_directory(Some(dir_max_width));
+@@ -413,6 +415,8 @@ impl HistoryCell for SessionHeaderHistoryCell {
+         let mut lines = vec![
+             make_row(title_spans),
+             make_row(Vec::new()),
++            make_row(help_spans),
++            make_row(Vec::new()),
+             make_row(model_spans),
+             make_row(dir_spans),
+         ];
+@@ -420,7 +424,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
+         if self.yolo_mode {
+             let permissions_label = format!("{PERMISSIONS_LABEL:<label_width$}");
+             lines.push(make_row(vec![
+-                Span::from(format!("{permissions_label} ")).dim(),
++                Span::from(format!("  {permissions_label} ")).dim(),
+                 "YOLO mode".magenta().bold(),
+             ]));
+         }
+@@ -429,7 +433,27 @@ impl HistoryCell for SessionHeaderHistoryCell {
+             .into_iter()
+             .map(|line| truncate_line_with_ellipsis_if_overflow(line, inner_width))
+             .collect();
+-        with_border(lines)
++        let bordered = with_border(lines);
++        let last = bordered.len().saturating_sub(1);
++        bordered
++            .into_iter()
++            .enumerate()
++            .map(|(index, mut line)| {
++                if index == 0 || index == last {
++                    for span in &mut line.spans {
++                        span.style = orange;
++                    }
++                } else {
++                    if let Some(span) = line.spans.first_mut() {
++                        span.style = orange;
++                    }
++                    if let Some(span) = line.spans.last_mut() {
++                        span.style = orange;
++                    }
++                }
++                line
++            })
++            .collect()
+     }
+ 
+     fn raw_lines(&self) -> Vec<Line<'static>> {
+diff --git a/codex-rs/tui/src/history_cell/tests.rs b/codex-rs/tui/src/history_cell/tests.rs
+index 0062cd5..dd4818b 100644
+--- a/codex-rs/tui/src/history_cell/tests.rs
++++ b/codex-rs/tui/src/history_cell/tests.rs
+@@ -581,7 +581,7 @@ fn raw_mode_toggle_transcript_snapshot() {
+ fn image_generation_call_renders_saved_path() {
+     let saved_path = test_path_buf("/tmp/generated-image.png").abs();
+     let expected_saved_path = format!(
+-        "  └ Saved to: {}",
++        "  ⎿ Saved to: {}",
+         Url::from_file_path(saved_path.as_path()).expect("test path should convert to file URL")
+     );
+     let cell = new_image_generation_call(
+@@ -595,7 +595,7 @@ fn image_generation_call_renders_saved_path() {
+         render_lines(&cell.display_lines(/*width*/ 80)),
+         vec![
+             "• Generated Image:".to_string(),
+-            "  └ A tiny blue square".to_string(),
++            "  ⎿ A tiny blue square".to_string(),
+             expected_saved_path,
+         ],
+     );
+@@ -2811,7 +2811,7 @@ fn reasoning_summary_height_matches_wrapped_rendering_for_url_like_content() {
+         })
+         .collect::<String>();
+     assert!(
+-        first_row.contains("•"),
++        first_row.contains("●"),
+         "expected first rendered row to keep summary bullet visible, got: {first_row:?}"
+     );
+ }
+@@ -3022,7 +3022,7 @@ fn agent_markdown_cell_renders_source_at_different_widths() {
+ 
+     let lines_80 = render_lines(&cell.display_lines(/*width*/ 80));
+     assert!(
+-        lines_80.first().is_some_and(|line| line.starts_with("• ")),
++        lines_80.first().is_some_and(|line| line.starts_with("● ")),
+         "first line should start with bullet prefix: {:?}",
+         lines_80[0]
+     );
+@@ -3080,7 +3080,7 @@ fn agent_markdown_cell_narrow_width_shows_prefix_only() {
+     let cell = AgentMarkdownCell::new(source.to_string(), &test_cwd());
+ 
+     let lines = render_lines(&cell.display_lines(/*width*/ 2));
+-    assert_eq!(lines, vec!["• ".to_string()]);
++    assert_eq!(lines, vec!["● ".to_string()]);
+ }
+ 
+ #[test]
+diff --git a/codex-rs/tui/src/motion.rs b/codex-rs/tui/src/motion.rs
+index 9a4332e..8bb80b0 100644
+--- a/codex-rs/tui/src/motion.rs
++++ b/codex-rs/tui/src/motion.rs
+@@ -44,7 +44,7 @@ pub(crate) fn activity_indicator(
+         MotionMode::Animated => Some(animated_activity_indicator(start_time)),
+         MotionMode::Reduced => match reduced_motion_indicator {
+             ReducedMotionIndicator::Hidden => None,
+-            ReducedMotionIndicator::StaticBullet => Some("•".dim()),
++            ReducedMotionIndicator::StaticBullet => Some("●".dim()),
+         },
+     }
+ }
+@@ -68,13 +68,13 @@ fn animated_activity_indicator(start_time: Option<Instant>) -> Span<'static> {
+         .map(|level| level.has_16m)
+         .unwrap_or(false)
+     {
+-        shimmer_spans("•")
++        shimmer_spans("●")
+             .into_iter()
+             .next()
+-            .unwrap_or_else(|| "•".into())
++            .unwrap_or_else(|| "●".into())
+     } else {
+         let blink_on = (elapsed.as_millis() / 600).is_multiple_of(2);
+-        if blink_on { "•".into() } else { "◦".dim() }
++        if blink_on { "●".into() } else { "◦".dim() }
+     }
+ }
+ 
+@@ -100,7 +100,7 @@ mod tests {
+                 MotionMode::Reduced,
+                 ReducedMotionIndicator::StaticBullet,
+             ),
+-            Some("•".dim())
++            Some("●".dim())
+         );
+     }
+ 
+diff --git a/codex-rs/tui/src/multi_agents.rs b/codex-rs/tui/src/multi_agents.rs
+index c81112b..62eb54c 100644
+--- a/codex-rs/tui/src/multi_agents.rs
++++ b/codex-rs/tui/src/multi_agents.rs
+@@ -75,9 +75,9 @@ pub(crate) struct SpawnRequestSummary {
+ 
+ pub(crate) fn agent_picker_status_dot_spans(is_closed: bool) -> Vec<Span<'static>> {
+     let dot = if is_closed {
+-        "•".into()
++        "●".into()
+     } else {
+-        "•".green()
++        "●".green()
+     };
+     vec![dot, " ".into()]
+ }
+@@ -460,7 +460,7 @@ fn resume_end(
+ fn collab_event(title: Line<'static>, details: Vec<Line<'static>>) -> PlainHistoryCell {
+     let mut lines: Vec<Line<'static>> = vec![title];
+     if !details.is_empty() {
+-        lines.extend(prefix_lines(details, "  └ ".dim(), "    ".into()));
++        lines.extend(prefix_lines(details, "  ⎿ ".dim(), "    ".into()));
+     }
+     PlainHistoryCell::new(lines)
+ }
+@@ -482,7 +482,7 @@ fn title_with_agent(
+ 
+ fn title_spans_line(mut spans: Vec<Span<'static>>) -> Line<'static> {
+     let mut title = Vec::with_capacity(spans.len() + 1);
+-    title.push(Span::from("• ").dim());
++    title.push(Span::from("● ").dim());
+     title.append(&mut spans);
+     title.into()
+ }
+diff --git a/codex-rs/tui/src/onboarding/bedrock.rs b/codex-rs/tui/src/onboarding/bedrock.rs
+index 43a1117..ede8294 100644
+--- a/codex-rs/tui/src/onboarding/bedrock.rs
++++ b/codex-rs/tui/src/onboarding/bedrock.rs
+@@ -383,7 +383,7 @@ impl BedrockState {
+             BedrockView::ApiKeyEntry(value) => {
+                 lines.push("  Enter your Amazon Bedrock API key.".into());
+                 lines.push("".into());
+-                let mut masked_value = "•".repeat(value.chars().count().saturating_sub(1));
++                let mut masked_value = "●".repeat(value.chars().count().saturating_sub(1));
+                 if let Some(character) = value.chars().last() {
+                     masked_value.push(character);
+                 }
+@@ -419,13 +419,13 @@ impl BedrockState {
+                         values[index].clone()
+                     } else if index == *selected_field {
+                         let mut masked_value =
+-                            "•".repeat(values[index].chars().count().saturating_sub(1));
++                            "●".repeat(values[index].chars().count().saturating_sub(1));
+                         if let Some(character) = values[index].chars().last() {
+                             masked_value.push(character);
+                         }
+                         masked_value
+                     } else {
+-                        "•".repeat(values[index].chars().count())
++                        "●".repeat(values[index].chars().count())
+                     };
+                     let line = format!("{marker} {label}: {value}");
+                     lines.push(if index == *selected_field {
+diff --git a/codex-rs/tui/src/resume_picker.rs b/codex-rs/tui/src/resume_picker.rs
+index 43778a0..7cfc086 100644
+--- a/codex-rs/tui/src/resume_picker.rs
++++ b/codex-rs/tui/src/resume_picker.rs
+@@ -3306,7 +3306,7 @@ fn render_conversation_preview_lines(
+     if lines.is_empty() {
+         return vec![
+             vec![
+-                "  └ ".set_style(secondary_text_style()),
++                "  ⎿ ".set_style(secondary_text_style()),
+                 "No transcript preview available"
+                     .set_style(secondary_text_style())
+                     .italic(),
+@@ -3325,7 +3325,7 @@ fn render_conversation_preview_lines(
+         .enumerate()
+         .map(|(idx, line)| {
+             let prefix = if idx + 1 == rendered_len {
+-                "  └ "
++                "  ⎿ "
+             } else {
+                 "  │ "
+             };
+diff --git a/codex-rs/tui/src/status_indicator_widget.rs b/codex-rs/tui/src/status_indicator_widget.rs
+index b3e5ede..46f18f2 100644
+--- a/codex-rs/tui/src/status_indicator_widget.rs
++++ b/codex-rs/tui/src/status_indicator_widget.rs
+@@ -43,7 +43,7 @@ mod summary_shimmer;
+ use summary_shimmer::summary_shimmer;
+ 
+ pub(crate) const STATUS_DETAILS_DEFAULT_MAX_LINES: usize = 3;
+-const DETAILS_PREFIX: &str = "  └ ";
++const DETAILS_PREFIX: &str = "  ⎿ ";
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub(crate) enum StatusDetailsCapitalization {
+diff --git a/codex-rs/tui/src/streaming/controller.rs b/codex-rs/tui/src/streaming/controller.rs
+index aff21d1..45acb0a 100644
+--- a/codex-rs/tui/src/streaming/controller.rs
++++ b/codex-rs/tui/src/streaming/controller.rs
+@@ -844,7 +844,7 @@ impl PlanStreamController {
+         let mut out_lines: Vec<HyperlinkLine> = Vec::with_capacity(/*capacity*/ 4);
+         if !self.header_emitted {
+             out_lines.push(HyperlinkLine::new(
+-                vec!["• ".dim(), "Proposed Plan".bold()].into(),
++                vec!["● ".dim(), "Proposed Plan".bold()].into(),
+             ));
+             out_lines.push(HyperlinkLine::new(Line::from(" ")));
+         }
+diff --git a/codex-rs/tui/src/thread_transcript.rs b/codex-rs/tui/src/thread_transcript.rs
+index babf331..85371ee 100644
+--- a/codex-rs/tui/src/thread_transcript.rs
++++ b/codex-rs/tui/src/thread_transcript.rs
+@@ -291,7 +291,7 @@ fn item_to_cells(
+             {
+                 cells.push(Arc::new(PrefixedWrappedHistoryCell::new(
+                     format!("Sent by Codex from task {source_thread_id}\n{prompt}"),
+-                    "• ".dim(),
++                    "● ".dim(),
+                     "  ",
+                 )));
+             }
+diff --git a/codex-rs/tui/src/wrapping.rs b/codex-rs/tui/src/wrapping.rs
+index ae0ce00..18d94d0 100644
+--- a/codex-rs/tui/src/wrapping.rs
++++ b/codex-rs/tui/src/wrapping.rs
+@@ -492,6 +492,7 @@ fn is_decorative_marker_token(raw_token: &str, token: &str) -> bool {
+         "-" | "*"
+             | "+"
+             | "•"
++            | "●"
+             | "◦"
+             | "▪"
+             | ">"
+@@ -499,6 +500,7 @@ fn is_decorative_marker_token(raw_token: &str, token: &str) -> bool {
+             | "│"
+             | "┆"
+             | "└"
++            | "⎿"
+             | "├"
+             | "┌"
+             | "┐"

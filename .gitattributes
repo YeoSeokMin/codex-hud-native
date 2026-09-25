@@ -1,0 +1,6 @@
+# 패치는 LF 그대로 (CRLF 로 바뀌면 git apply 가 실패)
+*.patch -text
+*.ps1 text eol=lf
+*.mjs text eol=lf
+*.md text eol=lf
+*.yml text eol=lf

@@ -1,0 +1,11 @@
+codex-hud-native
+Copyright 2026 YeoSeokMin
+
+This project distributes patches to, and binaries built from, OpenAI Codex
+(https://github.com/openai/codex), which is licensed under the Apache License 2.0.
+Copyright 2025 OpenAI. See the NOTICE file inside each release archive for the
+original Codex notices.
+
+Changes: patches/hud.patch adds the `tui.status_line_command` option (a command-backed
+status HUD rendered below the composer). patches/ui.patch changes glyphs and styling of
+the TUI. This project is not affiliated with or endorsed by OpenAI.
