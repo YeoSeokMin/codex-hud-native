@@ -2,13 +2,16 @@
 
 OpenAI Codex CLI의 **입력창 바로 아래**에 Claude Code HUD 같은 상태줄을 띄우는 codex 패치 빌드예요. Windows x64 전용이에요.
 
-입력창 아래에 이렇게 나와요(실제로는 색이 들어가요).
+HUD만 설치한 codex 화면이에요(실제로는 색이 들어가요). 입력창 아래 네 줄이 HUD예요.
 
 ```
-[gpt-5.5 | xhigh] PLUS my-project
-컨텍스트  21% ██░░░░░░░░ 58k/272k 12분
-5시간     12% █░░░░░░░░░ 3시간 27분
-주간       9% █░░░░░░░░░ 6일 10시간 9분
+› Ask Codex to do anything
+
+  ? for shortcuts                                              79% context left
+  [GPT-6-Astra | xhigh] PLUS my-project
+  컨텍스트  21% ██░░░░░░░░ 58k/272k 12분
+  5시간     12% █░░░░░░░░░ 3시간 27분
+  주간       9% █░░░░░░░░░ 6일 10시간 9분
 ```
 
 tmux로 옆 창에 HUD를 띄우는 방식이 아니라, codex 화면 안에 직접 그려요. 공식 codex에는 외부 명령으로 상태줄을 그리는 기능이 없어서, 그 기능(`tui.status_line_command`)을 codex 소스에 추가해 빌드했어요.
