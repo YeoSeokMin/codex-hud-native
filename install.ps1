@@ -231,6 +231,9 @@ function Install-CodexHud {
                     $pick = $releases | Sort-Object { ConvertTo-CodexVersion $_.Version }, Rev -Descending | Select-Object -First 1
                 }
                 $base = "https://github.com/$Repo/releases/download/$($pick.Tag)"
+            } elseif ($null -ne $releases) {
+                $want = if ($installed) { "codex $installed 용 " } else { '' }
+                throw "아직 설치할 수 있는 $($want)HUD 빌드가 없습니다. 새 빌드는 보통 하루 안에 자동으로 올라옵니다. 아무것도 바꾸지 않았습니다.`n    빌드 목록: https://github.com/$Repo/releases"
             } elseif ($installed -and (Test-UrlExists "https://github.com/$Repo/releases/download/v$installed/manifest.json")) {
                 $base = "https://github.com/$Repo/releases/download/v$installed"  # API 가 막혔을 때
             } else {
