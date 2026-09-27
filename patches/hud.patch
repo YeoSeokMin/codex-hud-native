@@ -1,5 +1,5 @@
 diff --git a/codex-rs/config/src/types.rs b/codex-rs/config/src/types.rs
-index 96a0222..956e787 100644
+index b2cad6b..fe5674f 100644
 --- a/codex-rs/config/src/types.rs
 +++ b/codex-rs/config/src/types.rs
 @@ -823,6 +823,12 @@ pub struct Tui {
@@ -16,7 +16,7 @@ index 96a0222..956e787 100644
      ///
      /// When set, the TUI renders the selected items into the terminal window/tab title.
 diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
-index 0bf3dcf..3bca867 100644
+index 5013f50..3049705 100644
 --- a/codex-rs/core/src/config/config_tests.rs
 +++ b/codex-rs/core/src/config/config_tests.rs
 @@ -1266,6 +1266,7 @@ fn config_toml_deserializes_model_availability_nux() {
@@ -27,7 +27,7 @@ index 0bf3dcf..3bca867 100644
              terminal_title: None,
              theme: None,
              pet: None,
-@@ -4395,6 +4396,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
+@@ -4405,6 +4406,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
              alternate_screen: AltScreenMode::Auto,
              status_line: None,
              status_line_use_colors: true,
@@ -36,10 +36,10 @@ index 0bf3dcf..3bca867 100644
              theme: None,
              pet: None,
 diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
-index e71ad88..12aa3f2 100644
+index 9078708..8c17f8e 100644
 --- a/codex-rs/core/src/config/mod.rs
 +++ b/codex-rs/core/src/config/mod.rs
-@@ -793,6 +793,9 @@ pub struct Config {
+@@ -803,6 +803,9 @@ pub struct Config {
      /// Whether to color status line items with colors from the active syntax theme.
      pub tui_status_line_use_colors: bool,
  
@@ -49,7 +49,7 @@ index e71ad88..12aa3f2 100644
      /// Ordered list of terminal title item identifiers for the TUI.
      ///
      /// When unset, the TUI defaults to: `activity` and `project`.
-@@ -4428,6 +4431,10 @@ impl Config {
+@@ -4480,6 +4483,10 @@ impl Config {
                  .as_ref()
                  .map(|t| t.status_line_use_colors)
                  .unwrap_or(true),
@@ -61,10 +61,10 @@ index e71ad88..12aa3f2 100644
              tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
              tui_pet: cfg.tui.as_ref().and_then(|t| t.pet.clone()),
 diff --git a/codex-rs/thread-manager-sample/src/main.rs b/codex-rs/thread-manager-sample/src/main.rs
-index 1bcf5d1..08a6279 100644
+index 308ce8b..0aa3650 100644
 --- a/codex-rs/thread-manager-sample/src/main.rs
 +++ b/codex-rs/thread-manager-sample/src/main.rs
-@@ -237,6 +237,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
+@@ -240,6 +240,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
          tui_alternate_screen: AltScreenMode::Auto,
          tui_status_line: None,
          tui_status_line_use_colors: true,
@@ -73,10 +73,10 @@ index 1bcf5d1..08a6279 100644
          tui_theme: None,
          tui_raw_output_mode: false,
 diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
-index 8e9680a..be95209 100644
+index 3f16d11..a4583db 100644
 --- a/codex-rs/tui/src/bottom_pane/mod.rs
 +++ b/codex-rs/tui/src/bottom_pane/mod.rs
-@@ -313,6 +313,8 @@ pub(crate) struct BottomPane {
+@@ -317,6 +317,8 @@ pub(crate) struct BottomPane {
      context_window_percent: Option<i64>,
      context_window_used_tokens: Option<i64>,
      keymap: RuntimeKeymap,
@@ -85,7 +85,7 @@ index 8e9680a..be95209 100644
  }
  
  pub(crate) struct BottomPaneParams {
-@@ -377,6 +379,7 @@ impl BottomPane {
+@@ -381,6 +383,7 @@ impl BottomPane {
              status: None,
              hook_status_message: None,
              inline_banner: None,
@@ -93,7 +93,7 @@ index 8e9680a..be95209 100644
              status_timer: crate::status_indicator_widget::StatusTimer::default(),
              unified_exec_footer: UnifiedExecFooter::new(),
              pending_input_preview: PendingInputPreview::new(),
-@@ -2229,6 +2232,13 @@ impl BottomPane {
+@@ -2251,6 +2254,13 @@ impl BottomPane {
                  }))
              };
              flex2.push(/*flex*/ 0, composer);
@@ -107,7 +107,7 @@ index 8e9680a..be95209 100644
              RenderableItem::Owned(Box::new(flex2))
          }
      }
-@@ -2261,6 +2271,14 @@ impl BottomPane {
+@@ -2283,6 +2293,14 @@ impl BottomPane {
          }
      }
  
@@ -123,7 +123,7 @@ index 8e9680a..be95209 100644
          if self.composer.set_status_line_enabled(enabled) {
              self.request_redraw();
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
-index 57591c4..2bebceb 100644
+index 984a958..1fede61 100644
 --- a/codex-rs/tui/src/chatwidget.rs
 +++ b/codex-rs/tui/src/chatwidget.rs
 @@ -399,6 +399,7 @@ pub(crate) use backend_banners::AutomaticModelSwitchReason;
@@ -134,7 +134,7 @@ index 57591c4..2bebceb 100644
  mod usage_notice;
  use self::rate_limits::RateLimitErrorKind;
  use self::rate_limits::RateLimitSwitchPromptState;
-@@ -762,6 +763,8 @@ pub(crate) struct ChatWidget {
+@@ -765,6 +766,8 @@ pub(crate) struct ChatWidget {
      feedback: codex_feedback::CodexFeedback,
      // Current session rollout path (if known)
      current_rollout_path: Option<PathBuf>,
@@ -144,10 +144,10 @@ index 57591c4..2bebceb 100644
      current_cwd: Option<PathBuf>,
      // App-server-backed command runner for status-line workspace metadata lookups.
 diff --git a/codex-rs/tui/src/chatwidget/constructor.rs b/codex-rs/tui/src/chatwidget/constructor.rs
-index 00d6329..5c66c7c 100644
+index 1c8c63e..3797657 100644
 --- a/codex-rs/tui/src/chatwidget/constructor.rs
 +++ b/codex-rs/tui/src/chatwidget/constructor.rs
-@@ -248,6 +248,7 @@ impl ChatWidget {
+@@ -252,6 +252,7 @@ impl ChatWidget {
              last_rendered_width: std::cell::Cell::new(None),
              feedback,
              current_rollout_path: None,
@@ -155,7 +155,7 @@ index 00d6329..5c66c7c 100644
              current_cwd,
              workspace_command_runner,
              instruction_source_paths: Vec::new(),
-@@ -316,6 +317,14 @@ impl ChatWidget {
+@@ -320,6 +321,14 @@ impl ChatWidget {
          widget
              .bottom_pane
              .set_token_activity_command_enabled(widget.has_codex_backend_auth);
@@ -171,7 +171,7 @@ index 00d6329..5c66c7c 100644
  
          widget
 diff --git a/codex-rs/tui/src/chatwidget/rate_limits.rs b/codex-rs/tui/src/chatwidget/rate_limits.rs
-index 3a0a7cc..e1240ac 100644
+index 36f72ed..0c370a4 100644
 --- a/codex-rs/tui/src/chatwidget/rate_limits.rs
 +++ b/codex-rs/tui/src/chatwidget/rate_limits.rs
 @@ -283,6 +283,9 @@ impl ChatWidget {
@@ -295,10 +295,10 @@ index 0000000..5fb3d81
 +    }
 +}
 diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
-index f84f875..20cd84d 100644
+index 616dd6d..8050c75 100644
 --- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
 +++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
-@@ -304,6 +304,7 @@ impl ChatWidget {
+@@ -307,6 +307,7 @@ impl ChatWidget {
          self.sync_status_surface_shared_state(&selections);
          self.refresh_status_line_from_selections(&selections);
          self.refresh_terminal_title_from_selections(&selections);
@@ -307,7 +307,7 @@ index f84f875..20cd84d 100644
  
      /// Recomputes and emits the terminal title from config and runtime state.
 diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
-index 83f5c1a..7fd29fc 100644
+index a08ccd8..624b484 100644
 --- a/codex-rs/tui/src/lib.rs
 +++ b/codex-rs/tui/src/lib.rs
 @@ -206,6 +206,7 @@ mod startup_presentation;

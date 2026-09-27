@@ -1,49 +1,102 @@
 # 패치된 codex 를 Windows x64 로 빌드해 GitHub Release 에 올린다.
-#   - 태그 push (v<codex 버전> 또는 v<codex 버전>-<N>) → 빌드 + 릴리스
-#   - 수동 실행 (workflow_dispatch) → 빌드만 (결과는 Actions 아티팩트)
+#   - 매일 자동 (schedule): npm 최신 codex 에 해당하는 릴리스가 없으면 빌드 + 릴리스
+#   - 태그 push (v<codex 버전> 또는 v<codex 버전>-<N>): 그 버전으로 빌드 + 릴리스
+#   - 수동 실행 (workflow_dispatch): 입력한 버전(비우면 npm 최신)으로 빌드, publish 를 끄면 아티팩트만
+# 패치(patches/)가 새 버전에 맞지 않으면 build 가 실패하고 릴리스는 만들지 않는다 → 패치를 포팅해서 push.
 name: release
 
 on:
+  schedule:
+    - cron: '17 21 * * *'  # 매일 06:17 KST
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      codex_version:
+        description: 빌드할 codex 버전 (비우면 npm 최신)
+        required: false
+      publish:
+        description: 릴리스까지 만들기
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 defaults:
   run:
     shell: pwsh
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+      tag: ${{ steps.pick.outputs.tag }}
+      build: ${{ steps.pick.outputs.build }}
+      publish: ${{ steps.pick.outputs.publish }}
+    steps:
+      - id: pick
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.codex_version }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              tag="$GITHUB_REF_NAME"
+              version="${tag#v}"; version="${version%%-*}"
+              publish=true ;;
+            workflow_dispatch)
+              version="${INPUT_VERSION:-$(npm view @openai/codex version)}"
+              tag="v$version"
+              publish="$INPUT_PUBLISH" ;;
+            *)
+              version="$(npm view @openai/codex version)"
+              tag="v$version"
+              publish=true ;;
+          esac
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "버전 형식이 이상합니다: $version"; exit 1; }
+          build=true
+          # 자동/수동 실행은 같은 버전 릴리스가 이미 있으면 건너뛴다 (태그 push 는 새 태그라 항상 빌드)
+          if [[ "$GITHUB_EVENT_NAME" != push && "$publish" == true ]] && gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$tag 릴리스가 이미 있어 건너뜁니다."
+            build=false
+          fi
+          echo "codex $version / tag $tag / build $build / publish $publish"
+          { echo "version=$version"; echo "tag=$tag"; echo "build=$build"; echo "publish=$publish"; } >> "$GITHUB_OUTPUT"
+
   official:
     name: official codex.exe hash
+    needs: resolve
+    if: needs.resolve.outputs.build == 'true'
     runs-on: windows-latest
     outputs:
-      version: ${{ steps.hash.outputs.version }}
       sha256: ${{ steps.hash.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
       - id: hash
+        env:
+          CODEX_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          $ver = (Get-Content CODEX_VERSION -Raw).Trim()
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -notmatch "^v$([regex]::Escape($ver))(-\d+)?$") {
-            throw "태그 $env:GITHUB_REF_NAME 가 CODEX_VERSION($ver) 과 맞지 않습니다."
-          }
           $dir = Join-Path $env:RUNNER_TEMP 'official'
-          npm install --prefix $dir "@openai/codex@$ver" --no-audit --no-fund
+          npm install --prefix $dir "@openai/codex@$env:CODEX_VERSION" --no-audit --no-fund
           if ($LASTEXITCODE) { throw 'npm install 실패' }
           $exe = Get-ChildItem $dir -Recurse -Filter codex.exe |
             Where-Object { $_.FullName -like '*\vendor\x86_64-pc-windows-msvc\bin\codex.exe' } | Select-Object -First 1
           if (-not $exe) { throw '공식 codex.exe 를 찾지 못했습니다.' }
           $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "version=$ver" >> $env:GITHUB_OUTPUT
           "sha256=$sha" >> $env:GITHUB_OUTPUT
-          Write-Host "codex $ver official sha256 $sha"
+          Write-Host "codex $env:CODEX_VERSION official sha256 $sha"
 
   build:
     name: build (${{ matrix.variant }})
-    needs: official
+    needs: [resolve, official]
     runs-on: windows-latest
     timeout-minutes: 350
     strategy:
@@ -51,7 +104,7 @@ jobs:
       matrix:
         variant: [hud, hud-ui]
     env:
-      CODEX_VERSION: ${{ needs.official.outputs.version }}
+      CODEX_VERSION: ${{ needs.resolve.outputs.version }}
       AWS_LC_SYS_PREBUILT_NASM: '1'
       # 러너 램(16GB)으로는 thin LTO 링크가 버거워서 LTO 와 디버그 정보를 끈다. 동작은 같고 파일만 조금 커진다.
       CARGO_PROFILE_RELEASE_LTO: 'false'
@@ -79,12 +132,20 @@ jobs:
         working-directory: ${{ env.CX }}
         run: |
           git apply "$env:GITHUB_WORKSPACE/patches/hud.patch"
-          if ($LASTEXITCODE) { throw 'hud.patch 적용 실패' }
+          if ($LASTEXITCODE) { throw "hud.patch 가 codex $env:CODEX_VERSION 에 맞지 않습니다. 패치를 포팅하세요." }
           if ('${{ matrix.variant }}' -eq 'hud-ui') {
             git apply "$env:GITHUB_WORKSPACE/patches/ui.patch"
-            if ($LASTEXITCODE) { throw 'ui.patch 적용 실패' }
+            if ($LASTEXITCODE) { throw "ui.patch 가 codex $env:CODEX_VERSION 에 맞지 않습니다. 패치를 포팅하세요." }
           }
           git status --short
+          # 공식 Windows 빌드는 CRLF 로 체크아웃한 소스로 만든다. sqlx migration 체크섬이 .sql 파일의 줄바꿈까지 포함하므로
+          # LF 그대로 빌드하면 공식 codex 가 만든 대화 기록 DB 를 "migration was modified" 로 거부한다 → CRLF 로 다시 체크아웃.
+          git add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -q -m 'codex-hud-native patches'
+          git config core.autocrlf true
+          git rm -q -r --cached .
+          git reset -q --hard
+          if ((Get-Content -Raw codex-rs/state/migrations/0001_threads.sql) -notmatch "`r`n") { throw 'CRLF 재체크아웃 실패' }
 
       - name: Install Rust toolchain
         working-directory: ${{ env.CX }}/codex-rs
@@ -113,9 +174,20 @@ jobs:
           Set-Content (Join-Path $env:CODEX_HOME 'config.toml') "[tui]`nstatus_line_command = `"node hud.mjs`"`nstatus_line = []`n" -Encoding ascii
           & $exe features list *> $null
           if ($LASTEXITCODE) { throw '올바른 설정을 읽지 못함' }
-          Set-Content (Join-Path $env:CODEX_HOME 'config.toml') "[tui]`nstatus_line_command = 3`n" -Encoding ascii
-          & $exe features list *> $null
+          & $exe -c 'tui.status_line_command=3' features list *> $null
           if (-not $LASTEXITCODE) { throw 'status_line_command 패치가 빠진 빌드' }
+          # 공식 codex 가 만든 대화 기록 DB 를 이 빌드가 열 수 있어야 한다 (migration 체크섬 호환)
+          $official = Join-Path $env:RUNNER_TEMP 'official'
+          npm install --prefix $official "@openai/codex@$env:CODEX_VERSION" --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'npm install 실패' }
+          $officialExe = (Get-ChildItem $official -Recurse -Filter codex.exe |
+            Where-Object { $_.FullName -like '*\vendor\x86_64-pc-windows-msvc\bin\codex.exe' } | Select-Object -First 1).FullName
+          $env:CODEX_HOME = Join-Path $env:RUNNER_TEMP 'codex-home-db'
+          New-Item -ItemType Directory -Force $env:CODEX_HOME | Out-Null
+          cmd /d /c "`"$officialExe`" app-server < nul > nul 2>&1"
+          if ($LASTEXITCODE) { throw '공식 codex 로 DB 를 만들지 못함' }
+          cmd /d /c "`"$exe`" app-server < nul 2>&1"
+          if ($LASTEXITCODE) { throw '공식 codex 가 만든 DB 를 이 빌드가 열지 못함 (migration 체크섬 불일치)' }
           $global:LASTEXITCODE = 0
 
       - name: Package
@@ -143,8 +215,8 @@ jobs:
           retention-days: 7
 
   release:
-    needs: [official, build]
-    if: github.ref_type == 'tag'
+    needs: [resolve, official, build]
+    if: needs.resolve.outputs.publish == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -157,38 +229,40 @@ jobs:
           merge-multiple: true
       - name: Write manifest
         env:
-          TAG: ${{ github.ref_name }}
-          CODEX_VERSION: ${{ needs.official.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          CODEX_VERSION: ${{ needs.resolve.outputs.version }}
           OFFICIAL_SHA256: ${{ needs.official.outputs.sha256 }}
         run: |
-          cp hud/codex-hud.mjs dist/
+          cp hud/codex-hud.mjs hud/codex-hud-launcher.mjs dist/
           python3 - <<'EOF'
           import hashlib, json, os
           dist = 'dist'
+          def sha(name):
+              with open(os.path.join(dist, name), 'rb') as f:
+                  return hashlib.sha256(f.read()).hexdigest()
           variants = {}
           for v in ('hud', 'hud-ui'):
               with open(os.path.join(dist, f'{v}.json'), encoding='utf-8-sig') as f:
                   info = json.load(f)
               variants[v] = {k: info[k] for k in ('file', 'sha256', 'exe_sha256')}
-          with open(os.path.join(dist, 'codex-hud.mjs'), 'rb') as f:
-              hud_sha = hashlib.sha256(f.read()).hexdigest()
           manifest = {
               'tag': os.environ['TAG'],
               'codex_version': os.environ['CODEX_VERSION'],
               'official_sha256': os.environ['OFFICIAL_SHA256'],
-              'hud_script_sha256': hud_sha,
+              'hud_script_sha256': sha('codex-hud.mjs'),
+              'launcher_sha256': sha('codex-hud-launcher.mjs'),
               'variants': variants,
           }
           with open(os.path.join(dist, 'manifest.json'), 'w', encoding='utf-8') as f:
               json.dump(manifest, f, indent=2)
           print(json.dumps(manifest, indent=2))
           EOF
-          cd dist && sha256sum codex-*.zip codex-hud.mjs manifest.json > SHA256SUMS.txt && cat SHA256SUMS.txt
+          cd dist && sha256sum codex-*.zip codex-hud.mjs codex-hud-launcher.mjs manifest.json > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          CODEX_VERSION: ${{ needs.official.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          CODEX_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           cat > notes.md <<EOF
           codex **${CODEX_VERSION}** 에 HUD 패치를 적용한 Windows x64 빌드입니다. 이 레포의 \`patches/\` 로 GitHub Actions 가 빌드했습니다.
@@ -196,7 +270,7 @@ jobs:
           - \`codex-${CODEX_VERSION}-hud-windows-x64.zip\`: HUD만
           - \`codex-${CODEX_VERSION}-hud-ui-windows-x64.zip\`: HUD + Claude 식 UI 개조
 
-          설치는 README 의 한 줄 명령을 쓰세요. 파일 해시는 \`SHA256SUMS.txt\` 에 있습니다.
+          설치는 README 의 한 줄 명령을 쓰세요. 설치된 codex 버전에 맞는 릴리스를 자동으로 고릅니다. 파일 해시는 \`SHA256SUMS.txt\` 에 있습니다.
           EOF
-          gh release create "$TAG" dist/codex-*.zip dist/codex-hud.mjs dist/manifest.json dist/SHA256SUMS.txt \
-            --title "$TAG (codex ${CODEX_VERSION})" --notes-file notes.md
+          gh release create "$TAG" dist/codex-*.zip dist/codex-hud.mjs dist/codex-hud-launcher.mjs dist/manifest.json dist/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" --title "$TAG (codex ${CODEX_VERSION})" --notes-file notes.md

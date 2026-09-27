@@ -1,8 +1,8 @@
 diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
-index 62266f8..e2dd7da 100644
+index 7fc9161..2714d8b 100644
 --- a/codex-rs/tui/src/app/event_dispatch.rs
 +++ b/codex-rs/tui/src/app/event_dispatch.rs
-@@ -2196,7 +2196,7 @@ impl App {
+@@ -2255,7 +2255,7 @@ impl App {
                                      ));
                              }
                                  self.chat_widget.add_plain_history_lines(vec![
@@ -12,10 +12,10 @@ index 62266f8..e2dd7da 100644
                                          "  ".into(),
                                          "Codex can now safely edit files and execute commands in your computer"
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-index 42937b1..7b447c7 100644
+index 158c39f..a69ca27 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-@@ -4904,8 +4904,14 @@ impl ChatComposer {
+@@ -4914,8 +4914,14 @@ impl ChatComposer {
          if let Some((warning_area, line)) = warning_notice {
              line.render(warning_area, buf);
          }
@@ -32,7 +32,7 @@ index 42937b1..7b447c7 100644
          if !remote_images_rect.is_empty() {
              Paragraph::new(self.attachments.remote_image_lines())
                  .style(style)
-@@ -4917,7 +4923,7 @@ impl ChatComposer {
+@@ -4927,7 +4933,7 @@ impl ChatComposer {
                      Span::from("!").light_red().bold()
                  } else if self.luna_reserve_active {
                      // Reserve keeps one arrow at every reasoning effort; only its foreground changes.
@@ -41,7 +41,7 @@ index 42937b1..7b447c7 100644
                          .fg(crate::terminal_palette::best_color((246, 197, 67)))
                          .bold()
                  } else if let Some(tier) = self.effort_tier {
-@@ -4928,10 +4934,10 @@ impl ChatComposer {
+@@ -4938,10 +4944,10 @@ impl ChatComposer {
                          .unwrap_or(1.0);
                      tier.prompt(charge)
                  } else {
@@ -153,10 +153,10 @@ index e170150..5924295 100644
          ]
          .into();
 diff --git a/codex-rs/tui/src/chatwidget/tests/composer_submission.rs b/codex-rs/tui/src/chatwidget/tests/composer_submission.rs
-index 95b6ea1..9ceefe2 100644
+index 7302a40..0735653 100644
 --- a/codex-rs/tui/src/chatwidget/tests/composer_submission.rs
 +++ b/codex-rs/tui/src/chatwidget/tests/composer_submission.rs
-@@ -2854,7 +2854,7 @@ fn image_preparation_keeps_input_responsive_and_preserves_pending_input() {
+@@ -2861,7 +2861,7 @@ fn image_preparation_keeps_input_responsive_and_preserves_pending_input() {
                      assert_chatwidget_snapshot!(
                          "image_preparation_disconnected",
                          normalize_snapshot_paths(render_bottom_popup(&chat, /*width*/ 80))
@@ -179,10 +179,10 @@ index ad26ff9..d5795ed 100644
                  "Inspect workspace".fg(crate::style::accent_color()),
              ])),
 diff --git a/codex-rs/tui/src/chatwidget/turn_runtime.rs b/codex-rs/tui/src/chatwidget/turn_runtime.rs
-index d473394..f335e41 100644
+index bad721b..62b8520 100644
 --- a/codex-rs/tui/src/chatwidget/turn_runtime.rs
 +++ b/codex-rs/tui/src/chatwidget/turn_runtime.rs
-@@ -62,7 +62,7 @@ impl ChatWidget {
+@@ -63,7 +63,7 @@ impl ChatWidget {
      pub(super) fn log_websocket_timing_totals(&mut self, delta: RuntimeMetricsSummary) {
          if let Some(label) = history_cell::runtime_metrics_label(delta.responses_api_summary()) {
              self.add_plain_history_lines(vec![
@@ -334,10 +334,10 @@ index 86d66a8..275fa78 100644
          lines.push(Line::from("    end"));
  
 diff --git a/codex-rs/tui/src/external_agent_config_migration/flow.rs b/codex-rs/tui/src/external_agent_config_migration/flow.rs
-index ebaf050..37e523a 100644
+index 612bb24..4a1e1e0 100644
 --- a/codex-rs/tui/src/external_agent_config_migration/flow.rs
 +++ b/codex-rs/tui/src/external_agent_config_migration/flow.rs
-@@ -146,7 +146,7 @@ fn external_agent_config_migration_started_lines(
+@@ -144,7 +144,7 @@ fn external_agent_config_migration_started_lines(
  
      let mut lines = vec![
          vec![
@@ -346,7 +346,7 @@ index ebaf050..37e523a 100644
              "Import started.".cyan(),
              " You can keep working while it finishes.".into(),
          ]
-@@ -202,7 +202,7 @@ pub(crate) fn external_agent_config_migration_finished_lines(
+@@ -200,7 +200,7 @@ pub(crate) fn external_agent_config_migration_finished_lines(
      };
      let mut lines = vec![
          vec![
@@ -356,10 +356,10 @@ index ebaf050..37e523a 100644
              format!("{imported_count} imported").green(),
              ", ".into(),
 diff --git a/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs b/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs
-index bc5cc6d..114bf34 100644
+index b9bd58c..9025661 100644
 --- a/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs
 +++ b/codex-rs/tui/src/external_agent_config_migration/flow_tests.rs
-@@ -225,7 +225,7 @@ fn external_agent_config_migration_status_lines_use_semantic_colors() {
+@@ -223,7 +223,7 @@ fn external_agent_config_migration_status_lines_use_semantic_colors() {
          ),
          vec![
              Line::from(vec![
@@ -368,7 +368,7 @@ index bc5cc6d..114bf34 100644
                  "Import started.".cyan(),
                  " You can keep working while it finishes.".into(),
              ]),
-@@ -287,7 +287,7 @@ fn external_agent_config_migration_status_lines_use_semantic_colors() {
+@@ -285,7 +285,7 @@ fn external_agent_config_migration_status_lines_use_semantic_colors() {
          external_agent_config_migration_finished_lines(&completed_notification()),
          vec![
              Line::from(vec![
@@ -568,10 +568,10 @@ index cffaf27..eb55122 100644
                  ]),
                  width,
 diff --git a/codex-rs/tui/src/history_cell/mcp_tests.rs b/codex-rs/tui/src/history_cell/mcp_tests.rs
-index dcf651f..b2f23c0 100644
+index 7a35659..85109ce 100644
 --- a/codex-rs/tui/src/history_cell/mcp_tests.rs
 +++ b/codex-rs/tui/src/history_cell/mcp_tests.rs
-@@ -426,7 +426,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
+@@ -427,7 +427,7 @@ fn code_mode_preserves_text_fields_on_nontext_and_unknown_blocks() {
              .take(2)
              .map(ToString::to_string)
              .collect::<Vec<_>>(),
@@ -580,7 +580,7 @@ index dcf651f..b2f23c0 100644
      );
  
      let compact = cell.compact_hyperlink_lines(/*width*/ 80);
-@@ -555,7 +555,7 @@ fn titled_image_call_keeps_error_and_full_title_when_narrow() {
+@@ -556,7 +556,7 @@ fn titled_image_call_keeps_error_and_full_title_when_narrow() {
      );
      let lines = cell.display_lines(/*width*/ 32);
      assert!(lines[0].width() <= 32);
@@ -589,7 +589,7 @@ index dcf651f..b2f23c0 100644
      insta::assert_snapshot!(
          lines
              .iter()
-@@ -659,7 +659,7 @@ fn mcp_result_preview_preserves_source_text_and_excludes_tree_gutters() {
+@@ -660,7 +660,7 @@ fn mcp_result_preview_preserves_source_text_and_excludes_tree_gutters() {
          assert!(
              source
                  .iter()
@@ -599,7 +599,7 @@ index dcf651f..b2f23c0 100644
      }
  }
 diff --git a/codex-rs/tui/src/history_cell/messages.rs b/codex-rs/tui/src/history_cell/messages.rs
-index 1bdc477..5154840 100644
+index 07676e3..40ce96b 100644
 --- a/codex-rs/tui/src/history_cell/messages.rs
 +++ b/codex-rs/tui/src/history_cell/messages.rs
 @@ -4,7 +4,6 @@
@@ -607,7 +607,7 @@ index 1bdc477..5154840 100644
  use super::*;
  use crate::style::accent_color_on;
 -use crate::style::history_prompt_style;
- use crate::terminal_hyperlinks::annotate_web_urls_in_line;
+ use crate::terminal_hyperlinks::annotate_web_urls;
  use crate::terminal_hyperlinks::lines_with_sources_eq;
  use crate::terminal_hyperlinks::remap_source_wrapped_line;
 @@ -199,7 +198,7 @@ impl HistoryCell for UserHistoryCell {
@@ -646,7 +646,7 @@ index 1bdc477..5154840 100644
          for source in lines.iter_mut().filter_map(|line| line.source.as_mut()) {
              source.right_reserve = 1;
          }
-@@ -386,7 +384,7 @@ impl ReasoningSummaryCell {
+@@ -385,7 +383,7 @@ impl ReasoningSummaryCell {
          crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines(
              &summary_lines,
              RtOptions::new(width as usize)
@@ -655,7 +655,7 @@ index 1bdc477..5154840 100644
                  .subsequent_indent("  ".into()),
          )
      }
-@@ -454,7 +452,7 @@ impl HistoryCell for AgentMessageCell {
+@@ -453,7 +451,7 @@ impl HistoryCell for AgentMessageCell {
          let mut wrapped = Vec::new();
          for (index, line) in self.lines.iter().enumerate() {
              let initial_indent = if index == 0 && self.is_first_line {
@@ -664,7 +664,7 @@ index 1bdc477..5154840 100644
              } else {
                  "  ".into()
              };
-@@ -584,12 +582,12 @@ impl AgentMarkdownCell {
+@@ -583,12 +581,12 @@ impl AgentMarkdownCell {
              else {
                  return prefix_hyperlink_lines(
                      vec![HyperlinkLine::new(Line::default())],
@@ -679,7 +679,7 @@ index 1bdc477..5154840 100644
              // " " prefix prepended below.
              let lines = crate::markdown::render_markdown_agent_with_list_spacing(
                  &self.markdown_source,
-@@ -607,7 +605,7 @@ impl AgentMarkdownCell {
+@@ -606,7 +604,7 @@ impl AgentMarkdownCell {
              };
              normalize_whitespace_only_hyperlink_lines(prefix_hyperlink_lines(
                  lines,
@@ -688,7 +688,7 @@ index 1bdc477..5154840 100644
                  "  ".into(),
              ))
          };
-@@ -688,7 +686,7 @@ impl HistoryCell for StreamingAgentTailCell {
+@@ -687,7 +685,7 @@ impl HistoryCell for StreamingAgentTailCell {
          normalize_whitespace_only_hyperlink_lines(prefix_hyperlink_lines(
              self.lines.clone(),
              if self.is_first_line {
@@ -698,7 +698,7 @@ index 1bdc477..5154840 100644
                  "  ".into()
              },
 diff --git a/codex-rs/tui/src/history_cell/notices.rs b/codex-rs/tui/src/history_cell/notices.rs
-index a786340..a0b62ad 100644
+index c5fa224..231e647 100644
 --- a/codex-rs/tui/src/history_cell/notices.rs
 +++ b/codex-rs/tui/src/history_cell/notices.rs
 @@ -315,7 +315,7 @@ impl HistoryCell for DeprecationNoticeCell {
@@ -1012,7 +1012,7 @@ index a6d5eed..7c9c50a 100644
  
      fn raw_lines(&self) -> Vec<Line<'static>> {
 diff --git a/codex-rs/tui/src/history_cell/tests.rs b/codex-rs/tui/src/history_cell/tests.rs
-index 0062cd5..dd4818b 100644
+index 5ce4b76..78cd179 100644
 --- a/codex-rs/tui/src/history_cell/tests.rs
 +++ b/codex-rs/tui/src/history_cell/tests.rs
 @@ -581,7 +581,7 @@ fn raw_mode_toggle_transcript_snapshot() {
@@ -1033,7 +1033,7 @@ index 0062cd5..dd4818b 100644
              expected_saved_path,
          ],
      );
-@@ -2811,7 +2811,7 @@ fn reasoning_summary_height_matches_wrapped_rendering_for_url_like_content() {
+@@ -2813,7 +2813,7 @@ fn reasoning_summary_height_matches_wrapped_rendering_for_url_like_content() {
          })
          .collect::<String>();
      assert!(
@@ -1042,7 +1042,7 @@ index 0062cd5..dd4818b 100644
          "expected first rendered row to keep summary bullet visible, got: {first_row:?}"
      );
  }
-@@ -3022,7 +3022,7 @@ fn agent_markdown_cell_renders_source_at_different_widths() {
+@@ -3024,7 +3024,7 @@ fn agent_markdown_cell_renders_source_at_different_widths() {
  
      let lines_80 = render_lines(&cell.display_lines(/*width*/ 80));
      assert!(
@@ -1051,7 +1051,7 @@ index 0062cd5..dd4818b 100644
          "first line should start with bullet prefix: {:?}",
          lines_80[0]
      );
-@@ -3080,7 +3080,7 @@ fn agent_markdown_cell_narrow_width_shows_prefix_only() {
+@@ -3082,7 +3082,7 @@ fn agent_markdown_cell_narrow_width_shows_prefix_only() {
      let cell = AgentMarkdownCell::new(source.to_string(), &test_cwd());
  
      let lines = render_lines(&cell.display_lines(/*width*/ 2));
@@ -1134,7 +1134,7 @@ index c81112b..62eb54c 100644
      title.into()
  }
 diff --git a/codex-rs/tui/src/onboarding/bedrock.rs b/codex-rs/tui/src/onboarding/bedrock.rs
-index 43a1117..ede8294 100644
+index b6b6f8b..370eec8 100644
 --- a/codex-rs/tui/src/onboarding/bedrock.rs
 +++ b/codex-rs/tui/src/onboarding/bedrock.rs
 @@ -383,7 +383,7 @@ impl BedrockState {
@@ -1163,10 +1163,10 @@ index 43a1117..ede8294 100644
                      let line = format!("{marker} {label}: {value}");
                      lines.push(if index == *selected_field {
 diff --git a/codex-rs/tui/src/resume_picker.rs b/codex-rs/tui/src/resume_picker.rs
-index 43778a0..7cfc086 100644
+index 5a976e4..f8b91b1 100644
 --- a/codex-rs/tui/src/resume_picker.rs
 +++ b/codex-rs/tui/src/resume_picker.rs
-@@ -3306,7 +3306,7 @@ fn render_conversation_preview_lines(
+@@ -3316,7 +3316,7 @@ fn render_conversation_preview_lines(
      if lines.is_empty() {
          return vec![
              vec![
@@ -1175,7 +1175,7 @@ index 43778a0..7cfc086 100644
                  "No transcript preview available"
                      .set_style(secondary_text_style())
                      .italic(),
-@@ -3325,7 +3325,7 @@ fn render_conversation_preview_lines(
+@@ -3335,7 +3335,7 @@ fn render_conversation_preview_lines(
          .enumerate()
          .map(|(idx, line)| {
              let prefix = if idx + 1 == rendered_len {
@@ -1198,7 +1198,7 @@ index b3e5ede..46f18f2 100644
  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
  pub(crate) enum StatusDetailsCapitalization {
 diff --git a/codex-rs/tui/src/streaming/controller.rs b/codex-rs/tui/src/streaming/controller.rs
-index aff21d1..45acb0a 100644
+index d66d11e..4bab2cd 100644
 --- a/codex-rs/tui/src/streaming/controller.rs
 +++ b/codex-rs/tui/src/streaming/controller.rs
 @@ -844,7 +844,7 @@ impl PlanStreamController {
